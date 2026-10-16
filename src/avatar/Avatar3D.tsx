@@ -11,18 +11,23 @@ interface Props {
   /** Read every frame, so it can change without re-rendering. */
   pose?: React.RefObject<Pose> | Pose;
   seed?: number;
+  /** Change this number to make the avatar give a little squash-and-settle (e.g. after an edit). */
+  bump?: number;
 }
 
 const HEAD_R = 0.5;
 
 /** A chunky, friendly avatar: big round head, simple body, animated by pose. */
-export function Avatar3D({ look, pose = "idle", seed = 0 }: Props) {
+const reducedMotion = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+
+export function Avatar3D({ look, pose = "idle", seed = 0, bump = 0 }: Props) {
   const root = useRef<THREE.Group>(null);
   const head = useRef<THREE.Group>(null);
   const armL = useRef<THREE.Group>(null);
   const armR = useRef<THREE.Group>(null);
   const legL = useRef<THREE.Group>(null);
   const legR = useRef<THREE.Group>(null);
+  const squash = useRef({ seen: bump, amount: 0 });
 
   const face = useMemo(() => {
     const t = new THREE.CanvasTexture(faceTexture(look));
@@ -38,8 +43,16 @@ export function Avatar3D({ look, pose = "idle", seed = 0 }: Props) {
   const pants = useMemo(() => new THREE.MeshStandardMaterial({ color: look.pants, roughness: 0.7 }), [look.pants]);
   const shoe = useMemo(() => new THREE.MeshStandardMaterial({ color: "#f4f4f6", roughness: 0.4 }), []);
 
-  useFrame(({ clock }) => {
+  useFrame(({ clock }, dt) => {
     const t = clock.elapsedTime + seed * 1.7;
+    const sq = squash.current;
+    if (sq.seen !== bump) {
+      sq.seen = bump;
+      if (!reducedMotion) sq.amount = 1;
+    }
+    // A quick, damped wobble: squash down, overshoot a touch, settle (about 300ms).
+    sq.amount = Math.max(0, sq.amount - dt * 3.4);
+    const w = sq.amount > 0 ? Math.sin((1 - sq.amount) * Math.PI * 2.2) * sq.amount * 0.06 : 0;
     const p = typeof pose === "string" ? pose : pose.current ?? "idle";
     const swing = p === "walk" ? Math.sin(t * 9) * 0.6 : 0;
     if (legL.current && legR.current) {
@@ -64,7 +77,10 @@ export function Avatar3D({ look, pose = "idle", seed = 0 }: Props) {
       head.current.rotation.x = p === "work" ? 0.18 + Math.sin(t * 2) * 0.03 : Math.sin(t * 0.7) * 0.04;
       head.current.rotation.z = p === "idle" ? Math.sin(t * 0.5) * 0.05 : 0;
     }
-    if (root.current) root.current.position.y = p === "walk" ? Math.abs(Math.sin(t * 9)) * 0.05 : 0;
+    if (root.current) {
+      root.current.position.y = p === "walk" ? Math.abs(Math.sin(t * 9)) * 0.05 : 0;
+      root.current.scale.set(1 + w * 0.6, 1 - w, 1 + w * 0.6);
+    }
   });
 
   const b = look.build;

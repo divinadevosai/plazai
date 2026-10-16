@@ -11,6 +11,7 @@ import type { Agent, Look, Provider } from "../types";
 import { ScreenFrame } from "./Chrome";
 
 type Tab = "face" | "hair" | "body" | "job";
+const TABS: Tab[] = ["face", "hair", "body", "job"];
 
 export function Maker({ nav, initialId }: { nav: Nav; initialId?: string }) {
   const agents = useStore((s) => s.agents);
@@ -18,11 +19,13 @@ export function Maker({ nav, initialId }: { nav: Nav; initialId?: string }) {
   const [draft, setDraft] = useState<Agent>(() => agents.find((a) => a.id === initialId) ?? agents[0] ?? newAgent());
   const [tab, setTab] = useState<Tab>("face");
   const pose = useRef<Pose>("idle");
+  const [bump, setBump] = useState(0);
   const saved = agents.find((a) => a.id === draft.id);
   const dirty = !saved || JSON.stringify(saved) !== JSON.stringify(draft);
 
   const look = (patch: Partial<Look>) => {
     chime("tap");
+    setBump((b) => b + 1);
     setDraft((d) => ({ ...d, look: { ...d.look, ...patch } }));
   };
   const wave = () => {
@@ -65,7 +68,7 @@ export function Maker({ nav, initialId }: { nav: Nav; initialId?: string }) {
               <directionalLight position={[3, 5, 4]} intensity={1.6} castShadow />
               <directionalLight position={[-4, 2, -2]} intensity={0.5} color="#bfe6ff" />
               <group position={[0, -0.9, 0]}>
-                <Avatar3D look={draft.look} pose={pose} />
+                <Avatar3D look={draft.look} pose={pose} bump={bump} />
                 <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.001, 0]} receiveShadow>
                   <circleGeometry args={[1.1, 48]} />
                   <meshStandardMaterial color="#ffffff" />
@@ -79,8 +82,9 @@ export function Maker({ nav, initialId }: { nav: Nav; initialId?: string }) {
         </div>
 
         <div className="panel" style={{ padding: 22, overflow: "auto" }}>
-          <div className="tabs" role="tablist">
-            {(["face", "hair", "body", "job"] as Tab[]).map((t) => (
+          <div className="tabs" role="tablist" style={{ "--n": 4, "--i": TABS.indexOf(tab) } as React.CSSProperties}>
+            <span className="pill" aria-hidden />
+            {TABS.map((t) => (
               <button key={t} role="tab" aria-selected={tab === t} className={tab === t ? "on" : ""} onClick={() => setTab(t)}>
                 {t === "job" ? "Job" : t[0]!.toUpperCase() + t.slice(1)}
               </button>

@@ -14,6 +14,9 @@
   --bad: #e5534b;
   --shadow: 0 1px 0 rgba(255, 255, 255, 0.9) inset, 0 6px 18px rgba(40, 60, 90, 0.12);
   --radius: 22px;
+  /* Strong curves: ease-out for responses and entrances, ease-in-out for things moving on screen. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
   color-scheme: light;
 }
 
@@ -35,10 +38,9 @@ button { cursor: pointer; }
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   padding: 10px 22px; border-radius: 999px; border: 2px solid #d3dae5;
   background: linear-gradient(180deg, #ffffff, #eef2f7); box-shadow: 0 2px 0 #d3dae5, 0 4px 10px rgba(40, 60, 90, 0.08);
-  font-weight: 700; transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s;
+  font-weight: 700; transition: transform 160ms var(--ease-out), box-shadow 160ms var(--ease-out), border-color 150ms ease;
 }
-.btn:hover { border-color: var(--accent); }
-.btn:active { transform: translateY(2px); box-shadow: 0 0 0 #d3dae5; }
+.btn:active { transform: translateY(1px) scale(0.97); box-shadow: 0 0 0 #d3dae5; }
 .btn.primary { background: linear-gradient(180deg, #5fd0ff, var(--accent)); border-color: var(--accent-deep); color: #fff; box-shadow: 0 2px 0 var(--accent-deep), 0 6px 14px rgba(17, 137, 201, 0.25); text-shadow: 0 1px 0 rgba(0, 0, 0, 0.12); }
 .btn.danger { color: var(--bad); }
 .btn.small { padding: 6px 14px; font-size: 14px; }
@@ -57,8 +59,9 @@ button { cursor: pointer; }
 .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
 
 /* ---------- screen chrome ---------- */
-.screen { position: absolute; inset: 0; display: flex; flex-direction: column; animation: zoomIn 0.32s cubic-bezier(0.2, 0.8, 0.2, 1); }
-@keyframes zoomIn { from { opacity: 0; } to { opacity: 1; } }
+/* translate, not scale: the 3D canvases measure their size while this runs */
+.screen { position: absolute; inset: 0; display: flex; flex-direction: column; animation: screenIn 200ms var(--ease-out); }
+@keyframes screenIn { from { opacity: 0; transform: translateY(6px); } }
 .topbar { display: flex; align-items: center; gap: 16px; padding: 18px 28px; }
 .topbar h1 { margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.01em; }
 .topbar .spacer { flex: 1; }
@@ -70,9 +73,9 @@ button { cursor: pointer; }
 .channels { flex: 1; display: grid; grid-template-columns: repeat(4, 1fr); grid-template-rows: repeat(3, 1fr); gap: 18px; padding: 34px 48px 18px; max-width: 1280px; width: 100%; margin: 0 auto; }
 .channel {
   position: relative; border-radius: 26px; border: 3px solid #d8dee8; overflow: hidden; background: linear-gradient(180deg, #ffffff, #f1f4f8);
-  box-shadow: 0 2px 0 #d8dee8, 0 8px 20px rgba(40, 60, 90, 0.08); transition: transform 0.18s ease, border-color 0.18s, box-shadow 0.18s; padding: 0; text-align: left;
+  box-shadow: 0 2px 0 #d8dee8, 0 8px 20px rgba(40, 60, 90, 0.08); transition: transform 200ms var(--ease-out), border-color 150ms ease, box-shadow 200ms var(--ease-out); padding: 0; text-align: left;
 }
-.channel:hover { transform: scale(1.04); border-color: var(--accent); box-shadow: 0 0 0 4px rgba(47, 181, 240, 0.25), 0 12px 26px rgba(40, 60, 90, 0.14); z-index: 1; }
+
 .channel.empty { background: repeating-linear-gradient(135deg, #f3f5f8 0 10px, #eef1f5 10px 20px); border-color: #e3e7ee; box-shadow: none; pointer-events: none; }
 .channel .label { position: absolute; left: 0; right: 0; bottom: 0; padding: 10px 16px; font-weight: 800; font-size: 18px; background: linear-gradient(180deg, transparent, rgba(255, 255, 255, 0.95) 45%); }
 .channel .art { position: absolute; inset: 0 0 34px; display: grid; place-items: center; }
@@ -95,9 +98,10 @@ button { cursor: pointer; }
 .roster button { flex: none; width: 64px; height: 64px; border-radius: 18px; border: 3px solid transparent; background: #f2f5f9; padding: 0; overflow: hidden; }
 .roster button.on { border-color: var(--accent); background: var(--accent-soft); }
 .roster img { width: 100%; height: 100%; }
-.tabs { display: flex; gap: 6px; padding: 6px; background: #eef2f7; border-radius: 999px; margin-bottom: 16px; }
-.tabs button { flex: 1; border: 0; background: transparent; padding: 8px 6px; border-radius: 999px; font-weight: 800; color: var(--mute); }
-.tabs button.on { background: #fff; color: var(--accent-deep); box-shadow: 0 2px 6px rgba(40, 60, 90, 0.1); }
+.tabs { position: relative; display: flex; gap: 6px; padding: 6px; background: #eef2f7; border-radius: 999px; margin-bottom: 16px; }
+.tabs .pill { position: absolute; top: 6px; bottom: 6px; left: 6px; width: calc((100% - 12px - 6px * (var(--n) - 1)) / var(--n)); border-radius: 999px; background: #fff; box-shadow: 0 2px 6px rgba(40, 60, 90, 0.1); transform: translateX(calc(var(--i) * (100% + 6px))); transition: transform 240ms var(--ease-in-out); }
+.tabs button { position: relative; flex: 1; border: 0; background: transparent; padding: 8px 6px; border-radius: 999px; font-weight: 800; color: var(--mute); }
+.tabs button.on { color: var(--accent-deep); }
 .options { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 16px; }
 .opt { border: 3px solid transparent; background: #f2f5f9; border-radius: 16px; padding: 10px 4px; font-size: 13px; font-weight: 700; color: var(--mute); }
 .opt.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-deep); }
@@ -130,7 +134,7 @@ button { cursor: pointer; }
 .overlay-top > * { pointer-events: auto; }
 .plaza-side { position: absolute; top: 84px; right: 24px; width: 300px; max-height: calc(100% - 200px); overflow: auto; padding: 12px; }
 .plaza-side button { width: 100%; display: flex; align-items: center; gap: 10px; border: 0; background: transparent; padding: 8px; border-radius: 14px; text-align: left; }
-.plaza-side button:hover, .plaza-side button.on { background: var(--accent-soft); }
+.plaza-side button.on { background: var(--accent-soft); }
 .plaza-side img { width: 44px; height: 44px; border-radius: 14px; background: #f2f5f9; }
 .quick { position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%); width: min(760px, calc(100% - 48px)); display: flex; gap: 10px; padding: 10px; border-radius: 999px; }
 .quick .input { border-radius: 999px; border: 0; background: #f2f5f9; }
@@ -147,4 +151,49 @@ button { cursor: pointer; }
   .maker, .grid2 { grid-template-columns: 1fr; }
   .plaza-side { display: none; }
   body { overflow: auto; }
+}
+
+/* ---------- motion ---------- */
+/* Every pressable surface answers the press. */
+.channel, .opt, .swatch, .tabs button, .pick button, .roster button, .plaza-side button, .round, button.panel, button.chip {
+  transition: transform 160ms var(--ease-out), background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease, color 150ms ease;
+}
+.opt:active, .swatch:active, .tabs button:active, .pick button:active, .roster button:active, .plaza-side button:active, .round:active, button.panel:active, button.chip:active { transform: scale(0.97); }
+.channel:active { transform: scale(0.98); }
+
+/* Hover only where there's a real pointer: a tap on a touch screen would leave it stuck. */
+@media (hover: hover) and (pointer: fine) {
+  .btn:hover { border-color: var(--accent); }
+  .channel:hover { transform: scale(1.04); border-color: var(--accent); box-shadow: 0 0 0 4px rgba(47, 181, 240, 0.25), 0 12px 26px rgba(40, 60, 90, 0.14); z-index: 1; }
+  .channel:hover:active { transform: scale(1.01); }
+  .plaza-side button:hover { background: var(--accent-soft); }
+  .opt:hover, .pick button:hover { border-color: #cdeffc; }
+}
+
+/* Things that appear grow in from where they belong, never from nothing. */
+.thought { transform-origin: 50% 100%; transition: opacity 200ms var(--ease-out), transform 200ms var(--ease-out); }
+.thought.done { animation: pop 420ms cubic-bezier(0.34, 1.56, 0.64, 1); }
+@keyframes pop { from { opacity: 0; transform: scale(0.85) translateY(6px); } }
+.badge, .card, .chip { transition: opacity 220ms var(--ease-out), transform 220ms var(--ease-out); }
+@starting-style {
+  .thought { opacity: 0; transform: scale(0.94) translateY(4px); }
+  .badge { opacity: 0; transform: scale(0.9); }
+  .card { opacity: 0; transform: translateY(-6px); }
+}
+
+/* First visit only: the menu tiles cascade in. Returning to the menu is instant. */
+.channels.intro .channel { animation: tileIn 380ms var(--ease-out) both; animation-delay: calc(var(--i) * 40ms); }
+@keyframes tileIn { from { opacity: 0; transform: translateY(10px) scale(0.97); } }
+
+/* Reduced motion: keep the fades that explain what happened, drop the movement. */
+@media (prefers-reduced-motion: reduce) {
+  .screen { animation-name: fadeOnly; }
+  @keyframes fadeOnly { from { opacity: 0; } }
+  .channels.intro .channel { animation: none; }
+  .thought.done { animation: fadeOnly 200ms ease; }
+  .tabs .pill { transition: none; }
+  .channel:hover, .channel:active, .btn:active, .opt:active, .swatch:active, .tabs button:active, .pick button:active, .roster button:active, .plaza-side button:active, .round:active, button.panel:active, button.chip:active { transform: none; }
+  @starting-style {
+    .thought, .badge, .card { transform: none; }
+  }
 }

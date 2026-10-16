@@ -3,6 +3,9 @@ import type { Nav, Screen } from "../App";
 import { Portrait } from "../avatar/Portrait";
 import { useStore } from "../store";
 
+// Only the first visit cascades the tiles in; coming back to the menu should be instant.
+let introPlayed = false;
+
 /** The home menu: a grid of channel tiles and a clock bar, like a cosy console menu. */
 export function Home({ nav }: { nav: Nav }) {
   const agents = useStore((s) => s.agents);
@@ -11,6 +14,10 @@ export function Home({ nav }: { nav: Nav }) {
   const running = tasks.filter((t) => t.status === "running").length;
   const unread = tasks.filter((t) => t.status === "done" && !t.read).length;
   const now = useClock();
+  const [intro] = useState(() => !introPlayed);
+  useEffect(() => {
+    introPlayed = true;
+  }, []);
 
   const channels: { id: Screen; label: string; art: React.ReactNode; badge?: number }[] = [
     {
@@ -54,15 +61,15 @@ export function Home({ nav }: { nav: Nav }) {
 
   return (
     <div className="home screen">
-      <div className="channels">
-        {channels.map((c) => (
-          <button key={c.id} className="channel" onClick={() => nav.go(c.id)} aria-label={c.label}>
+      <div className={`channels ${intro ? "intro" : ""}`}>
+        {channels.map((c, i) => (
+          <button key={c.id} className="channel" style={{ "--i": i } as React.CSSProperties} onClick={() => nav.go(c.id)} aria-label={c.label}>
             <div className="art">{c.art}</div>
             <div className="label">{c.label}</div>
             {c.badge ? <span className="badge">{c.badge}</span> : null}
           </button>
         ))}
-        {Array.from({ length: 12 - channels.length }, (_, i) => <div key={i} className="channel empty" aria-hidden />)}
+        {Array.from({ length: 12 - channels.length }, (_, i) => <div key={i} className="channel empty" style={{ "--i": channels.length + i } as React.CSSProperties} aria-hidden />)}
       </div>
       <div className="homebar">
         <button className="round" onClick={() => nav.go("plaza")} aria-label="Open the plaza">Plazai</button>
