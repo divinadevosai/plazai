@@ -1,4 +1,7 @@
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
+import { tickScheduler } from "./engine/run";
+import { Toaster } from "./toast";
+import { CalendarScreen } from "./screens/Calendar";
 import { chime } from "./sound";
 import { Board } from "./screens/Board";
 import { Home } from "./screens/Home";
@@ -10,36 +13,55 @@ const Plaza = lazy(() => import("./screens/Plaza").then((m) => ({ default: m.Pla
 const Maker = lazy(() => import("./screens/Maker").then((m) => ({ default: m.Maker })));
 import { Teams } from "./screens/Teams";
 
-export type Screen = "home" | "plaza" | "maker" | "tasks" | "board" | "teams" | "settings";
+export type Screen = "home" | "plaza" | "maker" | "tasks" | "board" | "teams" | "settings" | "calendar";
 export interface Nav {
-  go: (s: Screen, opts?: { agentId?: string }) => void;
+  go: (s: Screen, opts?: { agentId?: string; buildingId?: string }) => void;
 }
 
 export function App() {
   const [screen, setScreen] = useState<Screen>("home");
   const [agentId, setAgentId] = useState<string | undefined>();
+  const [buildingId, setBuildingId] = useState<string | undefined>();
+  // Reminders and scheduled tasks fire while Plazai is open.
+  useEffect(() => {
+    tickScheduler();
+    const t = setInterval(() => tickScheduler(), 15_000);
+    return () => clearInterval(t);
+  }, []);
   const nav: Nav = {
     go: (s, opts) => {
       chime(s === "home" ? "back" : "open");
       setAgentId(opts?.agentId);
+      setBuildingId(opts?.buildingId);
       setScreen(s);
     },
   };
+  return (
+    <>
+      {render()}
+      <Toaster />
+    </>
+  );
+
+  function render() {
   switch (screen) {
     case "plaza":
       return <Suspense fallback={<Loading />}><Plaza nav={nav} /></Suspense>;
     case "maker":
       return <Suspense fallback={<Loading />}><Maker nav={nav} initialId={agentId} /></Suspense>;
     case "tasks":
-      return <Tasks nav={nav} initialAgentId={agentId} />;
+      return <Tasks nav={nav} initialAgentId={agentId} initialBuildingId={buildingId} />;
     case "board":
       return <Board nav={nav} />;
     case "teams":
       return <Teams nav={nav} />;
     case "settings":
       return <SettingsScreen nav={nav} />;
+    case "calendar":
+      return <CalendarScreen nav={nav} />;
     default:
       return <Home nav={nav} />;
+  }
   }
 }
 

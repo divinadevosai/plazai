@@ -87,7 +87,185 @@ async function handle(req: IncomingMessage, res: ServerResponse, next: () => voi
     return res.end();
   }
 
+  if (url === "/api/github/context" && req.method === "POST") return githubContext(req, res, env);
+  if (url === "/api/github/push" && req.method === "POST") return githubPush(req, res, env);
+
   json(res, 404, { error: "Not found" });
+}
+
+// ---------- GitHub (Repo HQ) ----------
+// The browser sends the token only to this local server; it is only ever forwarded to the GitHub API.
+
+const REPO_RE = /^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/;
+const NAME_RE = /^[A-Za-z0-9_.-]{1,100}$/;
+const BRANCH_RE = /^(?!\/|.*\/\/|.*\.\.|.*\/$|.*\.lock$)[A-Za-z0-9._\/-]{1,120}$/;
+
+class GitHubError extends Error {
+  constructor(public status: number, message: string) {
+    super(message);
+  }
+}
+
+function gh(env: Record<string, string>, token?: string) {
+  const base = (env.GITHUB_API_URL || "https://api.github.com").replace(/\/+$/, "");
+  return async <T,>(path: string, init: { method?: string; body?: unknown; raw?: boolean } = {}): Promise<T> => {
+    const res = await fetch(`${base}${path}`, {
+      method: init.method ?? "GET",
+      headers: {
+        accept: init.raw ? "application/vnd.github.raw+json" : "application/vnd.github+json",
+        "x-github-api-version": "2022-11-28",
+        "user-agent": "plazai",
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+        ...(init.body ? { "content-type": "application/json" } : {}),
+      },
+      body: init.body ? JSON.stringify(init.body) : undefined,
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!res.ok) {
+      const data = (await res.json().catch(() => ({}))) as { message?: string };
+      throw new GitHubError(res.status, data.message ?? `GitHub returned ${res.status}`);
+    }
+    return (init.raw ? await res.text() : await res.json()) as T;
+  };
+}
+
+function ghFriendly(e: unknown) {
+  if (e instanceof GitHubError) {
+    if (e.status === 401) return "GitHub rejected the token. Check it in Settings.";
+    if (e.status === 403) return "Your token doesn't have permission for this. It needs Contents (and Pull requests) write access to the repo.";
+    if (e.status === 404) return "Repository not found, or your token can't see it.";
+    if (e.status === 422) return `GitHub said: ${e.message}`;
+    return `GitHub said: ${e.message}`;
+  }
+  return "Couldn't reach GitHub.";
+}
+
+const enc = (path: string) => path.split("/").map(encodeURIComponent).join("/");
+
+async function githubContext(req: IncomingMessage, res: ServerResponse, env: Record<string, string>) {
+  let body: { repo?: string; token?: string };
+  try {
+    body = JSON.parse(await readBody(req));
+  } catch {
+    return json(res, 400, { error: "Invalid request" });
+  }
+  const repo = String(body.repo ?? "").trim();
+  if (!REPO_RE.test(repo)) return json(res, 400, { error: "Use the form owner/name." });
+  const api = gh(env, body.token?.trim() || env.GITHUB_TOKEN || undefined);
+  try {
+    const info = await api<{ default_branch: string; description: string | null; language: string | null }>(`/repos/${repo}`);
+    const [readme, tree] = await Promise.all([
+      api<string>(`/repos/${repo}/readme`, { raw: true }).catch(() => ""),
+      api<{ tree: { path: string; type: string }[]; truncated: boolean }>(`/repos/${repo}/git/trees/${enc(info.default_branch)}?recursive=1`).catch(() => ({ tree: [], truncated: false })),
+    ]);
+    const files = tree.tree.filter((t) => t.type === "blob").map((t) => t.path);
+    const context = [
+      `Repository: ${repo} (default branch ${info.default_branch}${info.language ? `, mostly ${info.language}` : ""})`,
+      info.description && `Description: ${info.description}`,
+      `Files (${files.length}${tree.truncated || files.length > 250 ? ", list shortened" : ""}):\n${files.slice(0, 250).join("\n")}`,
+      readme && `README:\n${readme.slice(0, 6000)}`,
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+    json(res, 200, { context, defaultBranch: info.default_branch });
+  } catch (e) {
+    json(res, 502, { error: ghFriendly(e) });
+  }
+}
+
+interface PushBody {
+  token?: string;
+  mode?: "branch" | "new";
+  repo?: string;
+  name?: string;
+  private?: boolean;
+  description?: string;
+  branch?: string;
+  message?: string;
+  pr?: boolean;
+  files?: { path: string; content: string }[];
+}
+
+async function githubPush(req: IncomingMessage, res: ServerResponse, env: Record<string, string>) {
+  let b: PushBody;
+  try {
+    b = JSON.parse(await readBody(req, 2_000_000));
+  } catch {
+    return json(res, 400, { error: "Invalid request (or too large)." });
+  }
+  const token = b.token?.trim() || env.GITHUB_TOKEN;
+  if (!token) return json(res, 400, { error: "Add a GitHub token in Settings first." });
+  const files = Array.isArray(b.files) ? b.files : [];
+  if (!files.length || files.length > 50) return json(res, 400, { error: "Choose between 1 and 50 files." });
+  for (const f of files) {
+    const p = String(f.path ?? "");
+    if (!p || p.startsWith("/") || p.split("/").some((seg) => seg === ".." || seg === "." || seg === "" || seg === ".git") || p.length > 300) {
+      return json(res, 400, { error: `That file path isn't allowed: ${p}` });
+    }
+    if (typeof f.content !== "string" || f.content.length > 1_000_000) return json(res, 400, { error: `${p} is too large.` });
+  }
+  const message = String(b.message ?? "").trim().slice(0, 200) || "Update from Plazai";
+  const api = gh(env, token);
+
+  try {
+    let repo: string;
+    let branch: string;
+    let base: string;
+    if (b.mode === "new") {
+      const name = String(b.name ?? "").trim();
+      if (!NAME_RE.test(name)) return json(res, 400, { error: "Repository names can use letters, numbers, - _ and ." });
+      const created = await api<{ full_name: string; default_branch: string }>("/user/repos", {
+        method: "POST",
+        body: { name, private: Boolean(b.private), description: String(b.description ?? "").slice(0, 300), auto_init: true },
+      });
+      repo = created.full_name;
+      branch = base = created.default_branch;
+    } else {
+      repo = String(b.repo ?? "").trim();
+      branch = String(b.branch ?? "").trim();
+      if (!REPO_RE.test(repo)) return json(res, 400, { error: "Use the form owner/name." });
+      if (!BRANCH_RE.test(branch)) return json(res, 400, { error: "That branch name isn't valid." });
+      base = (await api<{ default_branch: string }>(`/repos/${repo}`)).default_branch;
+      if (branch === base) return json(res, 400, { error: `Plazai won't write straight to ${base}. Use a new branch.` });
+      const head = await api<{ object: { sha: string } }>(`/repos/${repo}/git/ref/heads/${enc(base)}`);
+      try {
+        await api(`/repos/${repo}/git/refs`, { method: "POST", body: { ref: `refs/heads/${branch}`, sha: head.object.sha } });
+      } catch (e) {
+        // An existing branch is fine: we add a commit on top of it.
+        if (!(e instanceof GitHubError && e.status === 422)) throw e;
+      }
+    }
+
+    // One commit with every file: blobs → tree → commit → move the branch.
+    const ref = await api<{ object: { sha: string } }>(`/repos/${repo}/git/ref/heads/${enc(branch)}`);
+    const parent = await api<{ tree: { sha: string } }>(`/repos/${repo}/git/commits/${ref.object.sha}`);
+    const tree = await api<{ sha: string }>(`/repos/${repo}/git/trees`, {
+      method: "POST",
+      body: { base_tree: parent.tree.sha, tree: files.map((f) => ({ path: f.path, mode: "100644", type: "blob", content: f.content })) },
+    });
+    const commit = await api<{ sha: string; html_url?: string }>(`/repos/${repo}/git/commits`, {
+      method: "POST",
+      body: { message, tree: tree.sha, parents: [ref.object.sha] },
+    });
+    await api(`/repos/${repo}/git/refs/heads/${enc(branch)}`, { method: "PATCH", body: { sha: commit.sha } });
+
+    let url = `https://github.com/${repo}/tree/${enc(branch)}`;
+    if (b.mode !== "new" && b.pr) {
+      try {
+        const pr = await api<{ html_url: string }>(`/repos/${repo}/pulls`, {
+          method: "POST",
+          body: { title: message, head: branch, base, body: "Made with Plazai 🏝️. Review before merging." },
+        });
+        url = pr.html_url;
+      } catch (e) {
+        // A PR for this branch may already exist; the commit still landed.
+        if (!(e instanceof GitHubError && e.status === 422)) throw e;
+      }
+    }
+    json(res, 200, { ok: true, repo, branch, commit: commit.sha, url });
+  } catch (e) {
+    json(res, 502, { error: ghFriendly(e) });
+  }
 }
 
 function resolveModel(b: ChatBody, env: Record<string, string>): LanguageModel | null {
@@ -128,13 +306,13 @@ function friendly(e: unknown) {
   return "The AI provider returned an error.";
 }
 
-function readBody(req: IncomingMessage) {
+function readBody(req: IncomingMessage, max = MAX_BODY) {
   return new Promise<string>((resolve, reject) => {
     let size = 0;
     const chunks: Buffer[] = [];
     req.on("data", (c: Buffer) => {
       size += c.length;
-      if (size > MAX_BODY) {
+      if (size > max) {
         reject(new Error("too large"));
         req.destroy();
       } else chunks.push(c);

@@ -1,8 +1,11 @@
 import { useFrame } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
+import { BUILDINGS, buildingSpot } from "./buildings";
 
-export const ISLAND_R = 13;
+export const ISLAND_R = 28;
+export const ROAD_IN = 15.4;
+export const ROAD_OUT = 17.6;
 export const DESK_R = 8.2;
 
 /** Where agent i (of n) works: an arc of desks behind the fountain. */
@@ -24,18 +27,32 @@ function rng(seed: number) {
 export function Island({ desks, busy }: { desks: number; busy: boolean[] }) {
   const trees = useMemo(() => {
     const r = rng(7);
-    return Array.from({ length: 14 }, (_, i) => {
-      const a = (i / 14) * Math.PI * 2 + r() * 0.25;
-      const d = 10.4 + r() * 1.6;
-      return { x: Math.cos(a) * d, z: Math.sin(a) * d, s: 0.8 + r() * 0.5, hue: r() };
-    }).filter((t) => !(t.z < -5 && Math.abs(t.x) < 6.5)); // keep the desk area open
+    const angles = BUILDINGS.map((b) => buildingSpot(b.id).angle);
+    const nearBuilding = (a: number) => angles.some((b) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b))) < 0.26);
+    const out: { x: number; z: number; s: number; hue: number }[] = [];
+    // outer ring, in the gaps between buildings
+    for (let i = 0; i < 40; i++) {
+      const a = (i / 40) * Math.PI * 2 + r() * 0.08;
+      if (nearBuilding(a)) continue;
+      const d = 22 + r() * 4.5;
+      out.push({ x: Math.cos(a) * d, z: Math.sin(a) * d, s: 0.8 + r() * 0.6, hue: r() });
+    }
+    // a few inside the road, away from the desks
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2 + 0.2;
+      const d = 11.5 + r() * 2;
+      const x = Math.cos(a) * d, z = Math.sin(a) * d;
+      if (z < -5 && Math.abs(x) < 7) continue;
+      out.push({ x, z, s: 0.75 + r() * 0.35, hue: r() });
+    }
+    return out;
   }, []);
   const flowers = useMemo(() => {
     const r = rng(42);
     const colors = ["#ff8fb1", "#ffd84d", "#ffffff", "#b38cff", "#ff9f5a"];
-    return Array.from({ length: 60 }, () => {
+    return Array.from({ length: 110 }, () => {
       const a = r() * Math.PI * 2;
-      const d = 5.5 + r() * 5;
+      const d = 5.5 + r() * 8.5;
       return { x: Math.cos(a) * d, z: Math.sin(a) * d, c: colors[Math.floor(r() * colors.length)]! };
     }).filter((f) => !(f.z < -5 && Math.abs(f.x) < 6.5));
   }, []);
@@ -44,7 +61,7 @@ export function Island({ desks, busy }: { desks: number; busy: boolean[] }) {
     <group>
       {/* sea */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.35, 0]} receiveShadow>
-        <circleGeometry args={[80, 64]} />
+        <circleGeometry args={[140, 64]} />
         <meshStandardMaterial color="#7fd0ef" roughness={0.25} metalness={0.05} />
       </mesh>
       {/* sand + grass */}
@@ -56,7 +73,22 @@ export function Island({ desks, busy }: { desks: number; busy: boolean[] }) {
         <cylinderGeometry args={[ISLAND_R, ISLAND_R + 0.2, 0.4, 64]} />
         <meshStandardMaterial color="#93d673" roughness={0.95} />
       </mesh>
-      {/* path ring */}
+      {/* ring road + a path up to every building */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.006, 0]} receiveShadow>
+        <ringGeometry args={[ROAD_IN, ROAD_OUT, 96]} />
+        <meshStandardMaterial color="#efe8d4" roughness={0.9} />
+      </mesh>
+      {BUILDINGS.map((b) => {
+        const { angle } = buildingSpot(b.id);
+        const mid = (ROAD_OUT + 18.6) / 2;
+        return (
+          <mesh key={b.id} rotation={[-Math.PI / 2, 0, -angle]} position={[Math.cos(angle) * mid, 0.007, Math.sin(angle) * mid]} receiveShadow>
+            <planeGeometry args={[18.6 - ROAD_OUT + 0.4, 1.6]} />
+            <meshStandardMaterial color="#efe8d4" roughness={0.9} />
+          </mesh>
+        );
+      })}
+      {/* inner path ring round the fountain */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.005, 0]} receiveShadow>
         <ringGeometry args={[3.2, 4.6, 64]} />
         <meshStandardMaterial color="#efe8d4" roughness={0.9} />
@@ -71,6 +103,7 @@ export function Island({ desks, busy }: { desks: number; busy: boolean[] }) {
       ))}
       <Bench position={[6, 0, 3.5]} rotation={-2.1} />
       <Bench position={[-6, 0, 3.5]} rotation={2.1} />
+      <Bench position={[0, 0, 9.5]} rotation={Math.PI} />
       {Array.from({ length: desks }, (_, i) => <Desk key={i} index={i} count={desks} busy={busy[i] ?? false} />)}
       <Clouds />
     </group>
@@ -202,12 +235,12 @@ function Clouds() {
   });
   const clouds = useMemo(() => {
     const r = rng(3);
-    return Array.from({ length: 7 }, (_, i) => ({ a: (i / 7) * Math.PI * 2, d: 22 + r() * 10, y: 11 + r() * 4, s: 1 + r() * 0.8 }));
+    return Array.from({ length: 9 }, (_, i) => ({ a: (i / 9) * Math.PI * 2, d: 40 + r() * 14, y: 16 + r() * 5, s: 1 + r() * 0.8 }));
   }, []);
   return (
     <group ref={g}>
       {clouds.map((c, i) => (
-        <group key={i} position={[Math.cos(c.a) * c.d, c.y, Math.sin(c.a) * c.d]} scale={c.s}>
+        <group key={i} position={[Math.cos(c.a) * c.d, c.y, Math.sin(c.a) * c.d]} scale={c.s * 1.4}>
           {[[0, 0, 0, 1.6], [1.5, -0.2, 0.2, 1.2], [-1.4, -0.3, 0, 1.1], [0.4, 0.6, -0.3, 1.1]].map(([x, y, z, r], j) => (
             <mesh key={j} position={[x!, y!, z!]}>
               <sphereGeometry args={[r!, 16, 12]} />

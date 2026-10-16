@@ -9,16 +9,34 @@ Plazai is a small, friendly, open-source take on multi-agent AI. No complicated 
 ## Features
 
 - **Avatar Maker:** build characters from faces, hair, body shapes and colours, then give each one a job, a personality and its own instructions.
-- **The Plaza:** a 3D island where your avatars wander, chat-bubble their thoughts while they work, and celebrate when they're done.
+- **The Plaza:** a 3D island town where your avatars wander, walk into the right building for each job, show their thoughts while they work, and celebrate when they're done.
+- **Ten buildings, each with its own expertise:** tasks are routed automatically from their wording, or you pick the place.
+
+  | Building | For |
+  | --- | --- |
+  | 🖥️ Server Room | Backend: APIs, databases, servers, performance |
+  | 📅 Calendar Tower | Reminders, schedules and plans |
+  | 🌿 Repo HQ | GitHub: read repos, write changes, upload a branch + pull request or a new repo |
+  | 📚 Library | Research, explanations and summaries |
+  | ☕ Writers' Café | Blog posts, emails, docs and copy |
+  | 🎨 Design Studio | UI/UX, layouts, branding and colour |
+  | 🧪 Test Lab | Code review, bugs and tests |
+  | 🚀 Launch Pad | Deploys, CI/CD and Docker (the rocket launches when a deploy finishes) |
+  | 🔐 Security Vault | Security reviews and hardening |
+  | 🔭 Data Observatory | Data, SQL, metrics and charts |
+
+- **Calendar:** reminders and scheduled tasks that can repeat daily, on weekdays or weekly. They go off while Plazai is open, and anything missed runs as soon as you're back.
 - **Teams:** line avatars up (Researcher → Writer → Reviewer) and each one builds on the last one's work.
 - **Message Board:** finished work lands here, ready to read and copy.
 - **Bring any brain:** Google Gemini, Anthropic Claude, OpenAI, or **Ollama** for free, fully local models. Pick a default, or give each avatar its own.
 - **Works with no key:** demo mode uses scripted answers, so you can try everything straight away.
 - **Private by design:** everything is saved in your browser. Keys only go to the small Plazai server running on your own computer, which refuses requests from other websites.
 
-| The Plaza | Avatar Maker | Tasks |
+![The Plaza: avatars working inside the Server Room, Launch Pad and Repo HQ](docs/plaza.png)
+
+| Avatar Maker | Tasks | Calendar |
 | --- | --- | --- |
-| ![Plaza](docs/plaza.png) | ![Avatar Maker](docs/maker.png) | ![Tasks](docs/tasks.png) |
+| ![Avatar Maker](docs/maker.png) | ![Tasks](docs/tasks.png) | ![Calendar](docs/calendar.png) |
 
 ## Quick start
 
@@ -47,17 +65,24 @@ Open **Settings** and choose a brain:
 
 You can paste keys in Settings (they're kept in your browser's storage) or put them in a `.env` file. See [`.env.example`](.env.example).
 
+### Repo HQ and GitHub
+
+Avatars working in Repo HQ read your repository (README and file list) and write complete files. When a task finishes, **Upload to GitHub** lets you pick the files and push them, either as a **new branch with a pull request** on an existing repo or as a **brand-new repo**. Plazai never writes to your default branch, and nothing is uploaded until you click.
+
+Create a [fine-grained token](https://github.com/settings/personal-access-tokens/new) for just the repos you want, with **Contents** and **Pull requests** set to *Read and write* (add **Administration: Read and write** to create new repos). Paste it in **Settings** or set `GITHUB_TOKEN` in `.env`. It's only ever sent to the GitHub API from the Plazai server on your own computer.
+
 ## How it works
 
 ```
 src/
   avatar/     avatar parts, face drawing (2D portraits + 3D face textures), 3D character
-  world/      the plaza island and the avatars that live on it
-  engine/     runs tasks: walk to desk → stream the model's answer → hand off to the next avatar
+  world/      the island, the ten buildings (and where tasks get routed), and the avatars who live there
+  engine/     runs tasks (walk to the building → stream the answer → hand off), the scheduler, file parsing
   screens/    home menu, Plaza, Avatar Maker, Tasks, Teams, Message Board, Settings
   store.ts    all app state (Zustand, saved to localStorage)
 server/
-  api.ts      a tiny Vite plugin: POST /api/chat streams from the chosen model (Vercel AI SDK)
+  api.ts      a tiny Vite plugin: /api/chat streams from the chosen model (Vercel AI SDK);
+              /api/github/* reads repos and pushes one commit per upload (branch + PR, or a new repo)
 ```
 
 A team task runs one avatar at a time. Each avatar gets the task plus everything its teammates handed over, and its answer streams live into the Plaza and the Tasks screen.
@@ -73,7 +98,7 @@ A team task runs one avatar at a time. Each avatar gets the task plus everything
 
 ## Contributing
 
-Ideas, bug reports and pull requests are very welcome. See [CONTRIBUTING.md](CONTRIBUTING.md). Some good first issues: more hair styles and outfits, new plaza props, a day/night cycle, avatar emotes, and sharing avatars as codes.
+Ideas, bug reports and pull requests are very welcome. See [CONTRIBUTING.md](CONTRIBUTING.md). Some good first issues: more hair styles and outfits, new buildings and props, a day/night cycle, avatar emotes, and sharing avatars as codes.
 
 ## A note on inspiration
 

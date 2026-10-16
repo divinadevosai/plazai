@@ -138,7 +138,8 @@ button { cursor: pointer; }
 .plaza-side img { width: 44px; height: 44px; border-radius: 14px; background: #f2f5f9; }
 .quick { position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%); width: min(760px, calc(100% - 48px)); display: flex; gap: 10px; padding: 10px; border-radius: 999px; }
 .quick .input { border-radius: 999px; border: 0; background: #f2f5f9; }
-.labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 0; }
+.overlay-top, .plaza-side, .quick { z-index: 1; }
 .label3d { position: absolute; left: 0; top: 0; visibility: hidden; display: grid; justify-items: center; gap: 6px; will-change: transform; }
 .tag { font: 800 13px "Nunito Variable", sans-serif; background: rgba(255, 255, 255, 0.92); padding: 3px 10px; border-radius: 999px; white-space: nowrap; box-shadow: 0 2px 6px rgba(40, 60, 90, 0.15); color: var(--ink); pointer-events: none; }
 .thought { width: 220px; font: 600 12.5px/1.4 "Nunito Variable", sans-serif; background: #fff; color: var(--ink); padding: 8px 12px; border-radius: 16px; box-shadow: 0 4px 14px rgba(40, 60, 90, 0.18); pointer-events: none; }
@@ -152,6 +153,22 @@ button { cursor: pointer; }
   .plaza-side { display: none; }
   body { overflow: auto; }
 }
+
+/* ---------- modal ---------- */
+.modal { width: min(560px, calc(100% - 32px)); max-height: calc(100% - 48px); overflow: auto; padding: 24px; border: 0; color: var(--ink); animation: modalIn 220ms var(--ease-out); }
+.modal::backdrop { background: rgba(40, 50, 70, 0.35); backdrop-filter: blur(2px); animation: fadeIn 200ms ease; }
+@keyframes modalIn { from { opacity: 0; transform: scale(0.96); } }
+@keyframes fadeIn { from { opacity: 0; } }
+
+/* ---------- toasts ---------- */
+.toaster { position: fixed; left: 50%; bottom: 104px; width: min(380px, calc(100% - 32px)); transform: translateX(-50%); margin: 0; padding: 0; list-style: none; z-index: 100; }
+.toast {
+  position: absolute; left: 0; right: 0; bottom: 0; display: grid; gap: 2px; padding: 12px 18px; border-radius: 18px; background: #fff;
+  box-shadow: 0 10px 30px rgba(40, 60, 90, 0.18), 0 0 0 1px rgba(40, 60, 90, 0.06); cursor: grab; touch-action: pan-y; user-select: none;
+  transform: translateY(var(--y)) scale(var(--s)); transform-origin: 50% 100%;
+  transition: transform 400ms ease, opacity 400ms ease;
+}
+.toast span { color: var(--mute); font-size: 14px; }
 
 /* ---------- motion ---------- */
 /* Every pressable surface answers the press. */
@@ -176,6 +193,7 @@ button { cursor: pointer; }
 @keyframes pop { from { opacity: 0; transform: scale(0.85) translateY(6px); } }
 .badge, .card, .chip { transition: opacity 220ms var(--ease-out), transform 220ms var(--ease-out); }
 @starting-style {
+  .toast { opacity: 0; transform: translateY(100%) scale(0.96); }
   .thought { opacity: 0; transform: scale(0.94) translateY(4px); }
   .badge { opacity: 0; transform: scale(0.9); }
   .card { opacity: 0; transform: translateY(-6px); }
@@ -193,7 +211,8 @@ button { cursor: pointer; }
   .thought.done { animation: fadeOnly 200ms ease; }
   .tabs .pill { transition: none; }
   .channel:hover, .channel:active, .btn:active, .opt:active, .swatch:active, .tabs button:active, .pick button:active, .roster button:active, .plaza-side button:active, .round:active, button.panel:active, button.chip:active { transform: none; }
+  .toast { transition: opacity 200ms ease; }
   @starting-style {
-    .thought, .badge, .card { transform: none; }
+    .thought, .badge, .card, .toast { transform: translateY(var(--y, 0)) scale(var(--s, 1)); }
   }
 }

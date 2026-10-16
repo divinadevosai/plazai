@@ -85,6 +85,31 @@ export function SettingsScreen({ nav }: { nav: Nav }) {
         </section>
 
         <section className="panel" style={{ padding: 22 }}>
+          <h2 style={{ marginTop: 0 }}>GitHub (Repo HQ)</h2>
+          <p className="hint" style={{ marginTop: -6 }}>
+            Lets avatars in Repo HQ read your repos and, when you click Upload, push their work as a new branch and pull request, or as a new repo. Nothing is ever uploaded without you clicking.
+          </p>
+          <label className="field">
+            <span>Personal access token</span>
+            <input
+              className="input"
+              type="password"
+              autoComplete="off"
+              value={settings.github.token}
+              placeholder="github_pat_…"
+              onChange={(e) => setSettings({ github: { ...settings.github, token: e.target.value.trim() } })}
+            />
+          </label>
+          <p className="hint" style={{ marginTop: -6 }}>
+            Make a <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noreferrer">fine-grained token ↗</a> for just the repos you want, with <b>Contents: Read and write</b> and <b>Pull requests: Read and write</b>. To create new repos, give it <b>Administration: Read and write</b> on all repositories. Stored only in this browser.
+          </p>
+          <label className="field">
+            <span>Default repository</span>
+            <input className="input" value={settings.github.defaultRepo} placeholder="owner/name" onChange={(e) => setSettings({ github: { ...settings.github, defaultRepo: e.target.value.trim() } })} />
+          </label>
+        </section>
+
+        <section className="panel" style={{ padding: 22 }}>
           <h2 style={{ marginTop: 0 }}>You</h2>
           <label className="field">
             <span>Your name (optional)</span>

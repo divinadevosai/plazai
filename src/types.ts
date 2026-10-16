@@ -53,6 +53,12 @@ export interface Task {
   title: string;
   prompt: string;
   assignee: { kind: "agent" | "team"; id: string };
+  /** Where the work happens: a building id, or "plaza" for the desks by the fountain. */
+  buildingId: string;
+  /** owner/name, for Repo HQ tasks. */
+  repo?: string;
+  /** Reminders arrive on the Message Board as notes, not work. */
+  kind?: "task" | "reminder";
   status: "running" | "done" | "failed" | "stopped";
   steps: Step[];
   createdAt: number;
@@ -66,4 +72,28 @@ export interface Settings {
   models: Record<Provider, string>;
   sound: boolean;
   ownerName: string;
+  github: { token: string; defaultRepo: string };
+}
+
+export interface Reminder {
+  id: string;
+  text: string;
+  at: number;
+  repeat: Repeat;
+  done?: boolean;
+}
+
+export type Repeat = "none" | "daily" | "weekdays" | "weekly";
+
+/** A task that runs by itself at a set time (while Plazai is open). */
+export interface Schedule {
+  id: string;
+  title: string;
+  prompt: string;
+  assignee: Task["assignee"];
+  buildingId: string;
+  repo?: string;
+  at: number;
+  repeat: Repeat;
+  done?: boolean;
 }

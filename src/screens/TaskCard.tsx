@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { Portrait } from "../avatar/Portrait";
+import { parseFiles } from "../engine/files";
 import { stopTask } from "../engine/run";
+import { buildingById } from "../world/buildings";
+import { UploadDialog } from "./Upload";
 import { useStore } from "../store";
 import type { Task } from "../types";
 
@@ -16,15 +19,39 @@ export function TaskCard({ task, open = true }: { task: Task; open?: boolean }) 
   const agents = useStore((s) => s.agents);
   const { removeTask } = useStore.getState();
   const [copied, setCopied] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const building = buildingById(task.buildingId);
   const [label, color] = STATUS[task.status];
   const final = [...task.steps].reverse().find((s) => s.status === "done")?.output ?? "";
+  const files = task.status === "done" ? parseFiles(task.steps.filter((s) => s.status === "done").map((s) => s.output).join("\n\n")) : [];
+
+  if (task.kind === "reminder") {
+    return (
+      <div className="panel card row" style={{ justifyContent: "space-between" }}>
+        <span>
+          <b>{task.title}</b>
+          <div className="hint">Reminder · {new Date(task.createdAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}</div>
+        </span>
+        <button className="btn small danger" onClick={() => removeTask(task.id)}>Delete</button>
+      </div>
+    );
+  }
 
   return (
     <div className="panel card">
       <div className="row" style={{ justifyContent: "space-between" }}>
         <div style={{ minWidth: 0 }}>
           <h3>{task.title}</h3>
-          <div className="hint">{new Date(task.createdAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}</div>
+          <div className="hint">
+            {new Date(task.createdAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}
+            {" · "}
+            {building ? (
+              <span style={{ color: building.roof, fontWeight: 800 }}>{building.name}</span>
+            ) : (
+              "Plaza desks"
+            )}
+            {task.repo ? ` · ${task.repo}` : ""}
+          </div>
         </div>
         <span className="chip" style={{ background: "#f2f5f9", color }}><span className="dot" style={{ background: color }} />{label}</span>
       </div>
@@ -57,6 +84,11 @@ export function TaskCard({ task, open = true }: { task: Task; open?: boolean }) 
               <button className="btn small" onClick={() => stopTask(task.id)}>Stop</button>
             ) : (
               <>
+                {files.length > 0 && (
+                  <button className="btn small primary" onClick={() => setUploading(true)}>
+                    Upload {files.length} file{files.length > 1 ? "s" : ""} to GitHub
+                  </button>
+                )}
                 {final && (
                   <button
                     className="btn small"
@@ -75,6 +107,7 @@ export function TaskCard({ task, open = true }: { task: Task; open?: boolean }) 
           </div>
         </>
       )}
+      {uploading && <UploadDialog task={task} files={files} onClose={() => setUploading(false)} />}
     </div>
   );
 }

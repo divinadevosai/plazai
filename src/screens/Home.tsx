@@ -13,6 +13,8 @@ export function Home({ nav }: { nav: Nav }) {
   const teams = useStore((s) => s.teams);
   const running = tasks.filter((t) => t.status === "running").length;
   const unread = tasks.filter((t) => t.status === "done" && !t.read).length;
+  const reminders = useStore((s) => s.reminders);
+  const upcoming = reminders.filter((r) => !r.done && r.at - Date.now() < 86_400_000).length;
   const now = useClock();
   const [intro] = useState(() => !introPlayed);
   useEffect(() => {
@@ -43,6 +45,17 @@ export function Home({ nav }: { nav: Nav }) {
       ),
     },
     { id: "tasks", label: "Tasks", art: <Icon d="M9 5h10M9 12h10M9 19h10M4 5h.01M4 12h.01M4 19h.01" color="#f2a33a" />, badge: running || undefined },
+    {
+      id: "calendar",
+      label: "Calendar",
+      art: (
+        <div style={{ width: 96, borderRadius: 18, overflow: "hidden", background: "#fff", boxShadow: "0 4px 12px rgba(40,60,90,.12)", textAlign: "center" }}>
+          <div style={{ background: "#e84d4d", color: "#fff", fontWeight: 800, fontSize: 14, padding: "4px 0" }}>{now.toLocaleDateString([], { month: "short" }).toUpperCase()}</div>
+          <div style={{ fontSize: 44, fontWeight: 800, color: "#5a6478", lineHeight: 1.3 }}>{now.getDate()}</div>
+        </div>
+      ),
+      badge: upcoming || undefined,
+    },
     { id: "board", label: "Message Board", art: <Icon d="M3 7l9 6 9-6M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z" color="#3fbf6a" />, badge: unread || undefined },
     {
       id: "teams",

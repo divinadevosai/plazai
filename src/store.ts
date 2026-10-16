@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { randomLook } from "./avatar/parts";
-import type { Agent, Settings, Step, Task, Team } from "./types";
+import type { Agent, Reminder, Repeat, Schedule, Settings, Step, Task, Team } from "./types";
 
 export const uid = (p: string) => `${p}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
 
@@ -49,12 +49,15 @@ const DEFAULT_SETTINGS: Settings = {
   models: { google: "gemini-2.5-flash", anthropic: "claude-haiku-5-5", openai: "gpt-5-mini", ollama: "llama3.2" },
   sound: true,
   ownerName: "",
+  github: { token: "", defaultRepo: "" },
 };
 
 interface State {
   agents: Agent[];
   teams: Team[];
   tasks: Task[];
+  reminders: Reminder[];
+  schedules: Schedule[];
   settings: Settings;
   saveAgent: (a: Agent) => void;
   removeAgent: (id: string) => void;
@@ -68,6 +71,10 @@ interface State {
   removeTask: (id: string) => void;
   markRead: (id: string) => void;
   setSettings: (patch: Partial<Settings>) => void;
+  saveReminder: (r: Reminder) => void;
+  removeReminder: (id: string) => void;
+  saveSchedule: (s: Schedule) => void;
+  removeSchedule: (id: string) => void;
   resetAll: () => void;
 }
 
@@ -77,6 +84,8 @@ export const useStore = create<State>()(
       agents: SEED_AGENTS,
       teams: SEED_TEAMS,
       tasks: [],
+      reminders: [],
+      schedules: [],
       settings: DEFAULT_SETTINGS,
       saveAgent: (a) => set((s) => ({ agents: s.agents.some((x) => x.id === a.id) ? s.agents.map((x) => (x.id === a.id ? a : x)) : [...s.agents, a] })),
       removeAgent: (id) =>
@@ -106,11 +115,26 @@ export const useStore = create<State>()(
       removeTask: (id) => set((s) => ({ tasks: s.tasks.filter((t) => t.id !== id) })),
       markRead: (id) => set((s) => ({ tasks: s.tasks.map((t) => (t.id === id ? { ...t, read: true } : t)) })),
       setSettings: (patch) => set((s) => ({ settings: { ...s.settings, ...patch } })),
-      resetAll: () => set({ agents: SEED_AGENTS, teams: SEED_TEAMS, tasks: [], settings: DEFAULT_SETTINGS }),
+      saveReminder: (r) => set((s) => ({ reminders: upsert(s.reminders, r) })),
+      removeReminder: (id) => set((s) => ({ reminders: s.reminders.filter((r) => r.id !== id) })),
+      saveSchedule: (x) => set((s) => ({ schedules: upsert(s.schedules, x) })),
+      removeSchedule: (id) => set((s) => ({ schedules: s.schedules.filter((x) => x.id !== id) })),
+      resetAll: () => set({ agents: SEED_AGENTS, teams: SEED_TEAMS, tasks: [], reminders: [], schedules: [], settings: DEFAULT_SETTINGS }),
     }),
     {
       name: "plazai",
-      version: 1,
+      version: 2,
+      // v1 → v2: buildings, reminders, schedules and GitHub settings.
+      migrate: (old, version) => {
+        const s = old as Partial<State>;
+        if (version < 2) {
+          s.tasks = (s.tasks ?? []).map((t) => ({ ...t, buildingId: t.buildingId ?? "plaza" }));
+          s.reminders ??= [];
+          s.schedules ??= [];
+          s.settings = { ...DEFAULT_SETTINGS, ...s.settings, github: s.settings?.github ?? DEFAULT_SETTINGS.github };
+        }
+        return s as State;
+      },
       // A reload can't resume a half-finished run, so mark interrupted ones as stopped.
       onRehydrateStorage: () => (state) => {
         state?.tasks.forEach((t) => {
@@ -122,11 +146,35 @@ export const useStore = create<State>()(
 );
 
 /** Which agent (if any) is busy, and with what, derived from running tasks. */
-export function activityOf(tasks: Task[], agentId: string): { status: Step["status"]; text: string } | null {
+export interface Activity {
+  status: Step["status"];
+  text: string;
+  buildingId: string;
+}
+
+export function activityOf(tasks: Task[], agentId: string): Activity | null {
   for (const t of tasks) {
     if (t.status !== "running") continue;
     const step = t.steps.find((s) => s.agentId === agentId && (s.status === "working" || s.status === "walking"));
-    if (step) return { status: step.status, text: step.output };
+    if (step) return { status: step.status, text: step.output, buildingId: t.buildingId ?? "plaza" };
   }
   return null;
+}
+
+function upsert<T extends { id: string }>(list: T[], item: T) {
+  return list.some((x) => x.id === item.id) ? list.map((x) => (x.id === item.id ? item : x)) : [...list, item];
+}
+
+/** The next time something repeating should happen after `from`. */
+export function nextOccurrence(at: number, repeat: Repeat, from = Date.now()): number | null {
+  if (repeat === "none") return null;
+  const d = new Date(at);
+  const step = () => {
+    if (repeat === "weekly") d.setDate(d.getDate() + 7);
+    else d.setDate(d.getDate() + 1);
+    if (repeat === "weekdays") while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
+  };
+  do step();
+  while (d.getTime() <= from);
+  return d.getTime();
 }
