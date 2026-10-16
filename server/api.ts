@@ -1,43 +1,122 @@
+import { randomBytes, timingSafeEqual } from "node:crypto";
+import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import type { AddressInfo } from "node:net";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
 import { streamText, type LanguageModel } from "ai";
-import { loadEnv, type Connect, type Plugin } from "vite";
+import { loadEnv, type Connect, type Logger, type Plugin } from "vite";
+import { blockedPath } from "../src/paths.ts";
 
 export type Provider = "google" | "anthropic" | "openai" | "ollama";
 
-interface ChatBody {
-  provider: Provider;
-  model: string;
-  apiKey?: string;
-  system: string;
-  prompt: string;
-}
-
 const MAX_BODY = 200_000;
 
-/** Vite plugin that serves Plazai's tiny local API: GET /api/status and POST /api/chat. */
+/** The only environment variables the server reads. Nothing else from your shell is kept. */
+const ENV_KEYS = ["GOOGLE_GENERATIVE_AI_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GITHUB_TOKEN", "OLLAMA_BASE_URL", "GITHUB_API_URL"] as const;
+const SECRET_KEYS = ["GOOGLE_GENERATIVE_AI_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GITHUB_TOKEN"] as const;
+type Env = Partial<Record<(typeof ENV_KEYS)[number], string>>;
+
+/**
+ * Vite plugin that serves Plazai's tiny local API (dev and preview).
+ *
+ * Keys typed into Settings travel with each request from your own browser. Keys in `.env` (or your
+ * shell) are only used for requests that carry the Plazai key, which is printed as a link in the
+ * terminal you started Plazai from. Other programs or users on your computer can't see it, so they
+ * can't borrow your keys or GitHub token.
+ */
 export function plazaiApi(): Plugin {
-  let env: Record<string, string> = {};
+  let env: Env = {};
+  let sessionKey = "";
   const attach = (middlewares: Connect.Server) => {
-    middlewares.use((req, res, next) => void handle(req, res, next, env));
+    middlewares.use((req, res, next) => {
+      handle(req, res, next, env, sessionKey).catch(() => {
+        // Never let one bad request take the whole server down.
+        if (!res.headersSent) json(res, 500, { error: "Something went wrong." });
+        else res.end();
+      });
+    });
+  };
+  const announce = (server: { httpServer: { once(e: "listening", cb: () => void): unknown; address(): unknown } | null; config: { logger: Logger } }, host: unknown) => {
+    server.httpServer?.once("listening", () => {
+      const port = (server.httpServer?.address() as AddressInfo | null)?.port;
+      const log = server.config.logger;
+      if (!isLoopback(host)) {
+        log.warn("\n  ⚠️  Plazai is reachable from your network (--host). Only do this on a network you trust.");
+      }
+      if (port && SECRET_KEYS.some((k) => env[k])) {
+        log.info(`\n  🔑 Keys found in .env. Open this link once so Plazai can use them:\n     http://127.0.0.1:${port}/?plazai-key=${sessionKey}\n`);
+      }
+    });
   };
   return {
     name: "plazai-api",
     configResolved(config) {
-      env = { ...loadEnv(config.mode, config.root, ""), ...pick(process.env) };
+      const loaded: Record<string, string | undefined> = { ...loadEnv(config.mode, config.root, ""), ...process.env };
+      env = Object.fromEntries(ENV_KEYS.filter((k) => loaded[k]).map((k) => [k, loaded[k]!]));
+      sessionKey = loadSessionKey();
     },
-    configureServer: (server) => attach(server.middlewares),
-    configurePreviewServer: (server) => attach(server.middlewares),
+    configureServer(server) {
+      attach(server.middlewares);
+      announce(server, server.config.server.host);
+    },
+    configurePreviewServer(server) {
+      attach(server.middlewares);
+      announce(server, server.config.preview.host);
+    },
   };
 }
 
-function pick(e: NodeJS.ProcessEnv) {
-  return Object.fromEntries(Object.entries(e).filter((kv): kv is [string, string] => typeof kv[1] === "string"));
+const isLoopback = (host: unknown) => host === undefined || host === "127.0.0.1" || host === "localhost" || host === "::1";
+
+/**
+ * A random key that proves a request came from the Plazai page you opened. It lives in a file only
+ * your user account can read, so the link keeps working after a restart. Delete the file to rotate it.
+ */
+function loadSessionKey() {
+  const dir = join(homedir(), ".config", "plazai");
+  const file = join(dir, "key");
+  try {
+    const existing = readFileSync(file, "utf8").trim();
+    if (/^[A-Za-z0-9_-]{40,}$/.test(existing)) return existing;
+  } catch {
+    // no key yet
+  }
+  const key = randomBytes(32).toString("base64url");
+  try {
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    writeFileSync(file, key, { mode: 0o600 });
+    chmodSync(file, 0o600);
+  } catch {
+    // Read-only home: the key just lasts until the server stops.
+  }
+  return key;
 }
 
-async function handle(req: IncomingMessage, res: ServerResponse, next: () => void, env: Record<string, string>) {
+function sameSecret(given: unknown, key: string) {
+  if (typeof given !== "string" || !key) return false;
+  const a = Buffer.from(given);
+  const b = Buffer.from(key);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
+
+async function readJson(req: IncomingMessage, max = MAX_BODY): Promise<Record<string, unknown> | null> {
+  if (!String(req.headers["content-type"] ?? "").startsWith("application/json")) return null;
+  try {
+    const body: unknown = JSON.parse(await readBody(req, max));
+    return isObject(body) ? body : null;
+  } catch {
+    return null;
+  }
+}
+
+async function handle(req: IncomingMessage, res: ServerResponse, next: () => void, env: Env, sessionKey: string) {
   const url = req.url ?? "";
   if (!url.startsWith("/api/")) return next();
 
@@ -48,26 +127,25 @@ async function handle(req: IncomingMessage, res: ServerResponse, next: () => voi
   const origin = req.headers.origin;
   if (origin && origin !== `http://${host}`) return json(res, 403, { error: "Forbidden" });
 
+  // Keys from .env are only for requests carrying the Plazai key (see the terminal link).
+  const trusted = sameSecret(req.headers["x-plazai-key"], sessionKey);
+  const envFor = (k: (typeof SECRET_KEYS)[number]) => (trusted ? env[k] ?? "" : "");
+
   if (url === "/api/status" && req.method === "GET") {
+    const has = (k: (typeof SECRET_KEYS)[number]) => Boolean(envFor(k));
     return json(res, 200, {
-      env: {
-        google: Boolean(env.GOOGLE_GENERATIVE_AI_API_KEY),
-        anthropic: Boolean(env.ANTHROPIC_API_KEY),
-        openai: Boolean(env.OPENAI_API_KEY),
-      },
+      env: { google: has("GOOGLE_GENERATIVE_AI_API_KEY"), anthropic: has("ANTHROPIC_API_KEY"), openai: has("OPENAI_API_KEY"), github: has("GITHUB_TOKEN") },
+      envLocked: !trusted && SECRET_KEYS.some((k) => env[k]),
       ollama: await ollamaModels(env),
     });
   }
 
   if (url === "/api/chat" && req.method === "POST") {
-    let body: ChatBody;
-    try {
-      body = JSON.parse(await readBody(req));
-    } catch {
-      return json(res, 400, { error: "Invalid request" });
-    }
-    const model = resolveModel(body, env);
-    if (!model) return json(res, 409, { error: `No API key for ${body.provider}. Add one in Settings or .env.` });
+    const body = await readJson(req);
+    if (!body) return json(res, 400, { error: "Invalid request" });
+    const provider = str(body.provider);
+    const model = resolveModel(provider, str(body.model), str(body.apiKey), envFor, env);
+    if (!model) return json(res, 409, { error: `No API key for ${provider || "that provider"}. Add one in Settings or .env.` });
 
     res.writeHead(200, { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" });
     const abort = new AbortController();
@@ -87,8 +165,8 @@ async function handle(req: IncomingMessage, res: ServerResponse, next: () => voi
     return res.end();
   }
 
-  if (url === "/api/github/context" && req.method === "POST") return githubContext(req, res, env);
-  if (url === "/api/github/push" && req.method === "POST") return githubPush(req, res, env);
+  if (url === "/api/github/context" && req.method === "POST") return githubContext(req, res, env, envFor("GITHUB_TOKEN"));
+  if (url === "/api/github/push" && req.method === "POST") return githubPush(req, res, env, envFor("GITHUB_TOKEN"));
 
   json(res, 404, { error: "Not found" });
 }
@@ -98,15 +176,17 @@ async function handle(req: IncomingMessage, res: ServerResponse, next: () => voi
 
 const REPO_RE = /^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/;
 const NAME_RE = /^[A-Za-z0-9_.-]{1,100}$/;
-const BRANCH_RE = /^(?!\/|.*\/\/|.*\.\.|.*\/$|.*\.lock$)[A-Za-z0-9._\/-]{1,120}$/;
+const BRANCH_RE = /^(?!\/|.*\/\/|.*\.\.|.*\/$|.*\.lock$|refs\/|heads\/)[A-Za-z0-9._\/-]{1,120}$/i;
 
 class GitHubError extends Error {
-  constructor(public status: number, message: string) {
+  status: number;
+  constructor(status: number, message: string) {
     super(message);
+    this.status = status;
   }
 }
 
-function gh(env: Record<string, string>, token?: string) {
+function gh(env: Env, token?: string) {
   const base = (env.GITHUB_API_URL || "https://api.github.com").replace(/\/+$/, "");
   return async <T,>(path: string, init: { method?: string; body?: unknown; raw?: boolean } = {}): Promise<T> => {
     const res = await fetch(`${base}${path}`, {
@@ -122,10 +202,12 @@ function gh(env: Record<string, string>, token?: string) {
       signal: AbortSignal.timeout(20_000),
     });
     if (!res.ok) {
-      const data = (await res.json().catch(() => ({}))) as { message?: string };
-      throw new GitHubError(res.status, data.message ?? `GitHub returned ${res.status}`);
+      const data = (await res.json().catch(() => ({}))) as { message?: unknown };
+      throw new GitHubError(res.status, typeof data.message === "string" ? data.message.slice(0, 200) : `GitHub returned ${res.status}`);
     }
-    return (init.raw ? await res.text() : await res.json()) as T;
+    const text = await res.text();
+    if (text.length > 5_000_000) throw new GitHubError(502, "GitHub's reply was too large.");
+    return (init.raw ? text : JSON.parse(text)) as T;
   };
 }
 
@@ -134,7 +216,6 @@ function ghFriendly(e: unknown) {
     if (e.status === 401) return "GitHub rejected the token. Check it in Settings.";
     if (e.status === 403) return "Your token doesn't have permission for this. It needs Contents (and Pull requests) write access to the repo.";
     if (e.status === 404) return "Repository not found, or your token can't see it.";
-    if (e.status === 422) return `GitHub said: ${e.message}`;
     return `GitHub said: ${e.message}`;
   }
   return "Couldn't reach GitHub.";
@@ -142,16 +223,12 @@ function ghFriendly(e: unknown) {
 
 const enc = (path: string) => path.split("/").map(encodeURIComponent).join("/");
 
-async function githubContext(req: IncomingMessage, res: ServerResponse, env: Record<string, string>) {
-  let body: { repo?: string; token?: string };
-  try {
-    body = JSON.parse(await readBody(req));
-  } catch {
-    return json(res, 400, { error: "Invalid request" });
-  }
-  const repo = String(body.repo ?? "").trim();
+async function githubContext(req: IncomingMessage, res: ServerResponse, env: Env, envToken: string) {
+  const body = await readJson(req);
+  if (!body) return json(res, 400, { error: "Invalid request" });
+  const repo = str(body.repo);
   if (!REPO_RE.test(repo)) return json(res, 400, { error: "Use the form owner/name." });
-  const api = gh(env, body.token?.trim() || env.GITHUB_TOKEN || undefined);
+  const api = gh(env, str(body.token) || envToken || undefined);
   try {
     const info = await api<{ default_branch: string; description: string | null; language: string | null }>(`/repos/${repo}`);
     const [readme, tree] = await Promise.all([
@@ -173,38 +250,22 @@ async function githubContext(req: IncomingMessage, res: ServerResponse, env: Rec
   }
 }
 
-interface PushBody {
-  token?: string;
-  mode?: "branch" | "new";
-  repo?: string;
-  name?: string;
-  private?: boolean;
-  description?: string;
-  branch?: string;
-  message?: string;
-  pr?: boolean;
-  files?: { path: string; content: string }[];
-}
-
-async function githubPush(req: IncomingMessage, res: ServerResponse, env: Record<string, string>) {
-  let b: PushBody;
-  try {
-    b = JSON.parse(await readBody(req, 2_000_000));
-  } catch {
-    return json(res, 400, { error: "Invalid request (or too large)." });
-  }
-  const token = b.token?.trim() || env.GITHUB_TOKEN;
+async function githubPush(req: IncomingMessage, res: ServerResponse, env: Env, envToken: string) {
+  const b = await readJson(req, 2_000_000);
+  if (!b) return json(res, 400, { error: "Invalid request (or too large)." });
+  const token = str(b.token) || envToken;
   if (!token) return json(res, 400, { error: "Add a GitHub token in Settings first." });
   const files = Array.isArray(b.files) ? b.files : [];
   if (!files.length || files.length > 50) return json(res, 400, { error: "Choose between 1 and 50 files." });
+  const clean: { path: string; content: string }[] = [];
   for (const f of files) {
-    const p = String(f.path ?? "");
-    if (!p || p.startsWith("/") || p.split("/").some((seg) => seg === ".." || seg === "." || seg === "" || seg === ".git") || p.length > 300) {
-      return json(res, 400, { error: `That file path isn't allowed: ${p}` });
-    }
-    if (typeof f.content !== "string" || f.content.length > 1_000_000) return json(res, 400, { error: `${p} is too large.` });
+    if (!isObject(f) || typeof f.path !== "string" || typeof f.content !== "string") return json(res, 400, { error: "Invalid file." });
+    const why = blockedPath(f.path);
+    if (why) return json(res, 400, { error: `${f.path.slice(0, 120)} ${why}, so Plazai won't upload it.` });
+    if (f.content.length > 1_000_000) return json(res, 400, { error: `${f.path} is too large.` });
+    clean.push({ path: f.path, content: f.content });
   }
-  const message = String(b.message ?? "").trim().slice(0, 200) || "Update from Plazai";
+  const message = str(b.message).slice(0, 200) || "Update from Plazai";
   const api = gh(env, token);
 
   try {
@@ -212,21 +273,23 @@ async function githubPush(req: IncomingMessage, res: ServerResponse, env: Record
     let branch: string;
     let base: string;
     if (b.mode === "new") {
-      const name = String(b.name ?? "").trim();
+      const name = str(b.name);
       if (!NAME_RE.test(name)) return json(res, 400, { error: "Repository names can use letters, numbers, - _ and ." });
       const created = await api<{ full_name: string; default_branch: string }>("/user/repos", {
         method: "POST",
-        body: { name, private: Boolean(b.private), description: String(b.description ?? "").slice(0, 300), auto_init: true },
+        // Private unless the request explicitly says otherwise.
+        body: { name, private: b.private !== false, description: str(b.description).slice(0, 300), auto_init: true },
       });
+      if (!REPO_RE.test(created.full_name)) throw new GitHubError(502, "Unexpected reply from GitHub.");
       repo = created.full_name;
       branch = base = created.default_branch;
     } else {
-      repo = String(b.repo ?? "").trim();
-      branch = String(b.branch ?? "").trim();
+      repo = str(b.repo);
+      branch = str(b.branch);
       if (!REPO_RE.test(repo)) return json(res, 400, { error: "Use the form owner/name." });
       if (!BRANCH_RE.test(branch)) return json(res, 400, { error: "That branch name isn't valid." });
       base = (await api<{ default_branch: string }>(`/repos/${repo}`)).default_branch;
-      if (branch === base) return json(res, 400, { error: `Plazai won't write straight to ${base}. Use a new branch.` });
+      if (branch.toLowerCase() === base.toLowerCase()) return json(res, 400, { error: `Plazai won't write straight to ${base}. Use a new branch.` });
       const head = await api<{ object: { sha: string } }>(`/repos/${repo}/git/ref/heads/${enc(base)}`);
       try {
         await api(`/repos/${repo}/git/refs`, { method: "POST", body: { ref: `refs/heads/${branch}`, sha: head.object.sha } });
@@ -238,25 +301,25 @@ async function githubPush(req: IncomingMessage, res: ServerResponse, env: Record
 
     // One commit with every file: blobs → tree → commit → move the branch.
     const ref = await api<{ object: { sha: string } }>(`/repos/${repo}/git/ref/heads/${enc(branch)}`);
-    const parent = await api<{ tree: { sha: string } }>(`/repos/${repo}/git/commits/${ref.object.sha}`);
+    const parent = await api<{ tree: { sha: string } }>(`/repos/${repo}/git/commits/${enc(ref.object.sha)}`);
     const tree = await api<{ sha: string }>(`/repos/${repo}/git/trees`, {
       method: "POST",
-      body: { base_tree: parent.tree.sha, tree: files.map((f) => ({ path: f.path, mode: "100644", type: "blob", content: f.content })) },
+      body: { base_tree: parent.tree.sha, tree: clean.map((f) => ({ path: f.path, mode: "100644", type: "blob", content: f.content })) },
     });
-    const commit = await api<{ sha: string; html_url?: string }>(`/repos/${repo}/git/commits`, {
+    const commit = await api<{ sha: string }>(`/repos/${repo}/git/commits`, {
       method: "POST",
       body: { message, tree: tree.sha, parents: [ref.object.sha] },
     });
     await api(`/repos/${repo}/git/refs/heads/${enc(branch)}`, { method: "PATCH", body: { sha: commit.sha } });
 
     let url = `https://github.com/${repo}/tree/${enc(branch)}`;
-    if (b.mode !== "new" && b.pr) {
+    if (b.mode !== "new" && b.pr === true) {
       try {
         const pr = await api<{ html_url: string }>(`/repos/${repo}/pulls`, {
           method: "POST",
           body: { title: message, head: branch, base, body: "Made with Plazai 🏝️. Review before merging." },
         });
-        url = pr.html_url;
+        if (/^https:\/\/github\.com\//.test(pr.html_url)) url = pr.html_url;
       } catch (e) {
         // A PR for this branch may already exist; the commit still landed.
         if (!(e instanceof GitHubError && e.status === 422)) throw e;
@@ -268,30 +331,31 @@ async function githubPush(req: IncomingMessage, res: ServerResponse, env: Record
   }
 }
 
-function resolveModel(b: ChatBody, env: Record<string, string>): LanguageModel | null {
-  const key = (k: string) => (b.apiKey?.trim() || env[k] || "").trim();
-  switch (b.provider) {
+function resolveModel(provider: string, model: string, apiKey: string, envFor: (k: (typeof SECRET_KEYS)[number]) => string, env: Env): LanguageModel | null {
+  if (!model || model.length > 200) return null;
+  const key = (k: (typeof SECRET_KEYS)[number]) => apiKey || envFor(k);
+  switch (provider) {
     case "google":
-      return key("GOOGLE_GENERATIVE_AI_API_KEY") ? createGoogleGenerativeAI({ apiKey: key("GOOGLE_GENERATIVE_AI_API_KEY") })(b.model) : null;
+      return key("GOOGLE_GENERATIVE_AI_API_KEY") ? createGoogleGenerativeAI({ apiKey: key("GOOGLE_GENERATIVE_AI_API_KEY") })(model) : null;
     case "anthropic":
-      return key("ANTHROPIC_API_KEY") ? createAnthropic({ apiKey: key("ANTHROPIC_API_KEY") })(b.model) : null;
+      return key("ANTHROPIC_API_KEY") ? createAnthropic({ apiKey: key("ANTHROPIC_API_KEY") })(model) : null;
     case "openai":
-      return key("OPENAI_API_KEY") ? createOpenAI({ apiKey: key("OPENAI_API_KEY") })(b.model) : null;
+      return key("OPENAI_API_KEY") ? createOpenAI({ apiKey: key("OPENAI_API_KEY") })(model) : null;
     case "ollama":
-      return createOpenAI({ baseURL: `${ollamaBase(env)}/v1`, apiKey: "ollama" }).chat(b.model);
+      return createOpenAI({ baseURL: `${ollamaBase(env)}/v1`, apiKey: "ollama" }).chat(model);
     default:
       return null;
   }
 }
 
-const ollamaBase = (env: Record<string, string>) => (env.OLLAMA_BASE_URL || "http://127.0.0.1:11434").replace(/\/+$/, "");
+const ollamaBase = (env: Env) => (env.OLLAMA_BASE_URL || "http://127.0.0.1:11434").replace(/\/+$/, "");
 
-async function ollamaModels(env: Record<string, string>): Promise<string[]> {
+async function ollamaModels(env: Env): Promise<string[]> {
   try {
     const r = await fetch(`${ollamaBase(env)}/api/tags`, { signal: AbortSignal.timeout(800) });
     if (!r.ok) return [];
-    const data = (await r.json()) as { models?: { name: string }[] };
-    return (data.models ?? []).map((m) => m.name);
+    const data = (await r.json()) as { models?: { name?: unknown }[] };
+    return (data.models ?? []).map((m) => m.name).filter((n): n is string => typeof n === "string").slice(0, 200);
   } catch {
     return [];
   }

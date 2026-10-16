@@ -1,6 +1,7 @@
 node_modules
 dist
-.env
-.env.local
+# every env file Vite reads (.env, .env.local, .env.development, .env.production.local, ...)
+.env*
+!.env.example
 *.log
 .DS_Store

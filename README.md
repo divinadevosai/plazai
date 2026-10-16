@@ -68,7 +68,7 @@ Open **Settings** and choose a brain:
 | OpenAI | A key from the [OpenAI Platform](https://platform.openai.com/api-keys) |
 | Ollama | [Ollama](https://ollama.com) running locally, plus a model: `ollama pull llama3.2` |
 
-You can paste keys in Settings (they're kept in your browser's storage) or put them in a `.env` file. See [`.env.example`](.env.example).
+You can paste keys in Settings (they're kept in your browser's storage) or put them in a `.env` file. See [`.env.example`](.env.example). Keys in `.env` are protected by a private key link: when Plazai starts it prints `🔑 Open this link once…` in your terminal. Open it once, and only that browser can use your `.env` keys. Other programs and users on your computer can't.
 
 ### Preview lunch and night time
 
@@ -78,7 +78,7 @@ Plazai uses your real clock. To see lunch or night without waiting, add `?time=H
 
 Avatars working in Repo HQ read your repository (README and file list) and write complete files. When a task finishes, **Upload to GitHub** lets you pick the files and push them, either as a **new branch with a pull request** on an existing repo or as a **brand-new repo**. Plazai never writes to your default branch, and nothing is uploaded until you click.
 
-Create a [fine-grained token](https://github.com/settings/personal-access-tokens/new) for just the repos you want, with **Contents** and **Pull requests** set to *Read and write* (add **Administration: Read and write** to create new repos). Paste it in **Settings** or set `GITHUB_TOKEN` in `.env`. It's only ever sent to the GitHub API from the Plazai server on your own computer.
+Create a [fine-grained token](https://github.com/settings/personal-access-tokens/new) for just the repos you want, with **Contents** and **Pull requests** set to *Read and write* (add **Administration: Read and write** to create new repos). Paste it in **Settings** or set `GITHUB_TOKEN` in `.env`. It's only ever sent to the GitHub API from the Plazai server on your own computer. For safety Plazai never uploads GitHub Actions workflows (`.github/workflows/`) or git internals, never writes to your default branch, and makes new repos private unless you confirm otherwise.
 
 ## How it works
 
@@ -95,6 +95,10 @@ server/
 ```
 
 A team task runs one avatar at a time. Each avatar gets the task plus everything its teammates handed over, and its answer streams live into the Plaza and the Tasks screen.
+
+## Security
+
+Plazai runs only on your own computer (127.0.0.1) and was audited end to end; see [SECURITY.md](SECURITY.md) for how your keys are protected and how to report a problem.
 
 ## Scripts
 

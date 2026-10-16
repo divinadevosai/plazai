@@ -25,11 +25,27 @@ export function App() {
   const [tour, setTour] = useState(false);
   const [agentId, setAgentId] = useState<string | undefined>();
   const [buildingId, setBuildingId] = useState<string | undefined>();
-  // Reminders and scheduled tasks fire while Plazai is open.
+  // Reminders and scheduled tasks fire while Plazai is open. With several tabs open, only one runs
+  // the scheduler, so nothing is started (and paid for) twice.
   useEffect(() => {
-    tickScheduler();
-    const t = setInterval(() => tickScheduler(), 15_000);
-    return () => clearInterval(t);
+    let t: ReturnType<typeof setInterval> | undefined;
+    const ac = new AbortController();
+    const start = () => {
+      tickScheduler();
+      t = setInterval(() => tickScheduler(), 15_000);
+    };
+    if (navigator.locks) {
+      navigator.locks
+        .request("plazai-scheduler", { signal: ac.signal }, () => {
+          start();
+          return new Promise<void>((resolve) => ac.signal.addEventListener("abort", () => resolve()));
+        })
+        .catch(() => {});
+    } else start();
+    return () => {
+      ac.abort();
+      clearInterval(t);
+    };
   }, []);
   const nav: Nav = {
     go: (s, opts) => {

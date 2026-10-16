@@ -3,9 +3,12 @@ import type { Nav } from "../App";
 import { useStore } from "../store";
 import type { Provider, Settings } from "../types";
 import { ScreenFrame } from "./Chrome";
+import { apiHeaders } from "../session";
 
 interface Status {
   env: Record<Exclude<Provider, "ollama">, boolean>;
+  /** Keys exist in .env, but this page hasn't been opened with the Plazai key link yet. */
+  envLocked?: boolean;
   ollama: string[];
 }
 
@@ -24,7 +27,7 @@ export function SettingsScreen({ nav }: { nav: Nav }) {
   const [status, setStatus] = useState<Status | null>(null);
 
   useEffect(() => {
-    fetch("/api/status").then((r) => r.json()).then(setStatus).catch(() => setStatus(null));
+    fetch("/api/status", { headers: apiHeaders(false) }).then((r) => r.json()).then(setStatus).catch(() => setStatus(null));
   }, []);
 
   const p = settings.provider;
@@ -34,6 +37,11 @@ export function SettingsScreen({ nav }: { nav: Nav }) {
         <section className="panel" style={{ padding: 22 }}>
           <h2 style={{ marginTop: 0 }}>Brain</h2>
           <p className="hint" style={{ marginTop: -6 }}>Which AI your avatars use by default. You can still give any avatar its own in the Avatar Maker.</p>
+          {status?.envLocked && (
+            <p className="hint" role="status" style={{ background: "var(--accent-soft)", padding: "10px 12px", borderRadius: 12 }}>
+              🔑 Plazai found keys in your <code>.env</code> file. To keep them safe from other programs on your computer, it only uses them after you open the link printed in the terminal where you started Plazai.
+            </p>
+          )}
           <div className="options" style={{ gridTemplateColumns: "repeat(5, 1fr)" }}>
             {PROVIDERS.map((x) => (
               <button key={x.id} className={`opt ${p === x.id ? "on" : ""}`} aria-pressed={p === x.id} onClick={() => setSettings({ provider: x.id })}>

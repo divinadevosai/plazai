@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import type { FileOut } from "../engine/files";
 import { useStore } from "../store";
 import type { Task } from "../types";
+import { apiHeaders } from "../session";
+import { blockedPath } from "../paths";
 
 /** Review files an agent wrote, then push them to GitHub: a new branch (+ pull request) or a brand-new repo. */
 export function UploadDialog({ task, files, onClose }: { task: Task; files: FileOut[]; onClose: () => void }) {
@@ -15,7 +17,8 @@ export function UploadDialog({ task, files, onClose }: { task: Task; files: File
   const [isPrivate, setPrivate] = useState(true);
   const [pr, setPr] = useState(true);
   const [message, setMessage] = useState(task.title.slice(0, 72));
-  const [picked, setPicked] = useState(() => new Set(files.map((f) => f.path)));
+  // Files Plazai refuses to upload (GitHub Actions, git internals) are shown but can't be ticked.
+  const [picked, setPicked] = useState(() => new Set(files.filter((f) => !blockedPath(f.path)).map((f) => f.path)));
   const [state, setState] = useState<{ busy?: boolean; error?: string; url?: string }>({});
 
   useEffect(() => {
@@ -23,11 +26,12 @@ export function UploadDialog({ task, files, onClose }: { task: Task; files: File
   }, []);
 
   const push = async () => {
+    if (mode === "new" && !isPrivate && !window.confirm(`Create a PUBLIC repository "${name}"? Anyone on the internet will be able to see these files.`)) return;
     setState({ busy: true });
     try {
       const res = await fetch("/api/github/push", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: apiHeaders(),
         body: JSON.stringify({
           token: github.token || undefined,
           mode,
@@ -38,7 +42,7 @@ export function UploadDialog({ task, files, onClose }: { task: Task; files: File
           description: task.prompt.slice(0, 200),
           message,
           pr,
-          files: files.filter((f) => picked.has(f.path)),
+          files: files.filter((f) => picked.has(f.path) && !blockedPath(f.path)),
         }),
       });
       const data = (await res.json()) as { error?: string; url?: string };
@@ -54,7 +58,7 @@ export function UploadDialog({ task, files, onClose }: { task: Task; files: File
       {state.url ? (
         <>
           <p>🚀 Done! Your files are on GitHub.</p>
-          <p><a href={state.url} target="_blank" rel="noreferrer">{state.url}</a></p>
+          <p>{state.url.startsWith("https://github.com/") ? <a href={state.url} target="_blank" rel="noreferrer">{state.url}</a> : state.url}</p>
           <div className="row" style={{ justifyContent: "flex-end" }}>
             <button className="btn primary" onClick={() => dialog.current?.close()}>Close</button>
           </div>
@@ -81,17 +85,20 @@ export function UploadDialog({ task, files, onClose }: { task: Task; files: File
           ) : (
             <>
               <label className="field"><span>Repository name</span><input className="input" value={name} onChange={(e) => setName(e.target.value.trim())} /></label>
-              <button type="button" className={`opt ${isPrivate ? "on" : ""}`} style={{ padding: "8px 14px", marginBottom: 14 }} aria-pressed={isPrivate} onClick={() => setPrivate(!isPrivate)}>{isPrivate ? "✓ " : ""}Private</button>
+              <button type="button" className={`opt ${isPrivate ? "on" : ""}`} style={{ padding: "8px 14px", marginBottom: 14 }} aria-pressed={isPrivate} onClick={() => setPrivate(!isPrivate)}>{isPrivate ? "✓ Private" : "⚠️ Public: anyone can see it"}</button>
             </>
           )}
           <label className="field"><span>Commit message</span><input className="input" value={message} maxLength={200} onChange={(e) => setMessage(e.target.value)} /></label>
           <div className="field"><span>Files</span></div>
           <div style={{ display: "grid", gap: 6, maxHeight: 180, overflow: "auto", marginBottom: 14 }}>
-            {files.map((f) => (
-              <label key={f.path} className="row" style={{ background: "#f6f8fb", borderRadius: 12, padding: "6px 10px", flexWrap: "nowrap" }}>
+            {files.map((f) => {
+              const blocked = blockedPath(f.path);
+              return (
+              <label key={f.path} className="row" style={{ background: "#f6f8fb", borderRadius: 12, padding: "6px 10px", flexWrap: "nowrap", opacity: blocked ? 0.6 : 1 }} title={blocked ? `Not uploaded: this ${blocked}.` : undefined}>
                 <input
                   type="checkbox"
-                  checked={picked.has(f.path)}
+                  disabled={Boolean(blocked)}
+                  checked={!blocked && picked.has(f.path)}
                   onChange={(e) => {
                     const next = new Set(picked);
                     if (e.target.checked) next.add(f.path);
@@ -100,16 +107,17 @@ export function UploadDialog({ task, files, onClose }: { task: Task; files: File
                   }}
                 />
                 <code style={{ flex: 1 }}>{f.path}</code>
-                <span className="hint">{f.content.split("\n").length} lines</span>
+                <span className="hint">{blocked ? "blocked" : `${f.content.split("\n").length} lines`}</span>
               </label>
-            ))}
+              );
+            })}
           </div>
           {state.error && <p style={{ color: "var(--bad)" }} role="alert">{state.error}</p>}
           <p className="hint">{mode === "branch" ? "Plazai never writes to your main branch. You review the pull request on GitHub." : "A new repository is created on your account with these files."}</p>
           <div className="row" style={{ justifyContent: "flex-end" }}>
             <button type="button" className="btn" onClick={() => dialog.current?.close()}>Cancel</button>
             <button className="btn primary" disabled={state.busy || !picked.size || !github.token || (mode === "branch" ? !repo || !branch : !name)}>
-              {state.busy ? "Uploading…" : mode === "branch" ? (pr ? "Push & open PR" : "Push branch") : "Create repo"}
+              {state.busy ? "Uploading…" : mode === "branch" ? (pr ? "Push & open PR" : "Push branch") : isPrivate ? "Create private repo" : "Create public repo"}
             </button>
           </div>
         </form>

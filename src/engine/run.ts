@@ -4,6 +4,7 @@ import type { Agent, Provider, Task } from "../types";
 import { buildingById, PLAZA_ID, routeTask } from "../world/buildings";
 import { toast } from "../toast";
 import { clockNow, dayPhase, offDutyOf } from "../clock";
+import { apiHeaders } from "../session";
 
 const controllers = new Map<string, AbortController>();
 const WALK_MS = 2600;
@@ -122,7 +123,7 @@ async function work(taskId: string, i: number, agent: Agent, task: Task, context
   }
   const res = await fetch("/api/chat", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: apiHeaders(),
     signal,
     body: JSON.stringify({
       provider,
@@ -201,7 +202,7 @@ async function streamDemo(taskId: string, i: number, agent: Agent, task: Task, h
 async function repoContext(repo: string, signal: AbortSignal): Promise<string> {
   const { token } = useStore.getState().settings.github;
   try {
-    const res = await fetch("/api/github/context", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ repo, token: token || undefined }), signal });
+    const res = await fetch("/api/github/context", { method: "POST", headers: apiHeaders(), body: JSON.stringify({ repo, token: token || undefined }), signal });
     const data = (await res.json()) as { context?: string; error?: string };
     if (!res.ok) return `(Couldn't read ${repo}: ${data.error ?? res.status}. Work from the task alone.)`;
     return data.context ?? "";
