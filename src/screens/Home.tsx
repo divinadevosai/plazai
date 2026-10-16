@@ -21,7 +21,7 @@ export function Home({ nav }: { nav: Nav }) {
     introPlayed = true;
   }, []);
 
-  const channels: { id: Screen; label: string; art: React.ReactNode; badge?: number }[] = [
+  const channels: { id: Screen; label: string; art: React.ReactNode; badge?: number; tour?: boolean }[] = [
     {
       id: "plaza",
       label: "Plaza",
@@ -70,13 +70,19 @@ export function Home({ nav }: { nav: Nav }) {
       ),
     },
     { id: "settings", label: "Settings", art: <Icon d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" color="#8e98a8" /> },
+    {
+      id: "plaza",
+      label: "How it works",
+      tour: true,
+      art: <span style={{ width: 84, height: 84, borderRadius: "50%", background: "var(--accent)", color: "#fff", display: "grid", placeItems: "center", fontSize: 50, fontWeight: 900 }}>?</span>,
+    },
   ];
 
   return (
     <div className="home screen">
       <div className={`channels ${intro ? "intro" : ""}`}>
         {channels.map((c, i) => (
-          <button key={c.id} className="channel" style={{ "--i": i } as React.CSSProperties} onClick={() => nav.go(c.id)} aria-label={c.label}>
+          <button key={c.label} className="channel" style={{ "--i": i } as React.CSSProperties} onClick={() => nav.go(c.id, { tour: c.tour })} aria-label={c.label}>
             <div className="art">{c.art}</div>
             <div className="label">{c.label}</div>
             {c.badge ? <span className="badge">{c.badge}</span> : null}

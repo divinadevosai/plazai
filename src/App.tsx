@@ -12,14 +12,17 @@ import { Tasks } from "./screens/Tasks";
 const Plaza = lazy(() => import("./screens/Plaza").then((m) => ({ default: m.Plaza })));
 const Maker = lazy(() => import("./screens/Maker").then((m) => ({ default: m.Maker })));
 import { Teams } from "./screens/Teams";
+import { useStore } from "./store";
 
 export type Screen = "home" | "plaza" | "maker" | "tasks" | "board" | "teams" | "settings" | "calendar";
 export interface Nav {
-  go: (s: Screen, opts?: { agentId?: string; buildingId?: string }) => void;
+  go: (s: Screen, opts?: { agentId?: string; buildingId?: string; tour?: boolean }) => void;
 }
 
 export function App() {
-  const [screen, setScreen] = useState<Screen>("home");
+  // First visit: straight into the world for the welcome tour.
+  const [screen, setScreen] = useState<Screen>(() => (useStore.getState().introSeen ? "home" : "plaza"));
+  const [tour, setTour] = useState(false);
   const [agentId, setAgentId] = useState<string | undefined>();
   const [buildingId, setBuildingId] = useState<string | undefined>();
   // Reminders and scheduled tasks fire while Plazai is open.
@@ -33,6 +36,7 @@ export function App() {
       chime(s === "home" ? "back" : "open");
       setAgentId(opts?.agentId);
       setBuildingId(opts?.buildingId);
+      setTour(!!opts?.tour);
       setScreen(s);
     },
   };
@@ -46,7 +50,7 @@ export function App() {
   function render() {
   switch (screen) {
     case "plaza":
-      return <Suspense fallback={<Loading />}><Plaza nav={nav} /></Suspense>;
+      return <Suspense fallback={<Loading />}><Plaza key={tour ? "tour" : "plaza"} nav={nav} tour={tour} /></Suspense>;
     case "maker":
       return <Suspense fallback={<Loading />}><Maker nav={nav} initialId={agentId} /></Suspense>;
     case "tasks":

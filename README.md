@@ -9,6 +9,7 @@ Plazai is a small, friendly, open-source take on multi-agent AI. No complicated 
 ## Features
 
 - **Avatar Maker:** build characters from faces, hair, body shapes and colours, then give each one a job, a personality and its own instructions.
+- **A guided welcome:** the first time you open Plazai, the camera flies in over the island and a short step-by-step guide shows you around: the avatars, the buildings, GitHub, the Calendar, lunch, bedtime and how to give a task. Replay it any time with the **?** button or the **How it works** tile.
 - **The Plaza:** a 3D island town where your avatars wander, walk into the right building for each job, show their thoughts while they work, and celebrate when they're done.
 - **Ten buildings, each with its own expertise:** tasks are routed automatically from their wording, or you pick the place.
 

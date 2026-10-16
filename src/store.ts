@@ -61,6 +61,9 @@ interface State {
   reminders: Reminder[];
   schedules: Schedule[];
   settings: Settings;
+  /** Has the welcome tour been seen (or skipped)? */
+  introSeen: boolean;
+  setIntroSeen: (v: boolean) => void;
   saveAgent: (a: Agent) => void;
   removeAgent: (id: string) => void;
   newAgent: () => Agent;
@@ -89,6 +92,8 @@ export const useStore = create<State>()(
       reminders: [],
       schedules: [],
       settings: DEFAULT_SETTINGS,
+      introSeen: false,
+      setIntroSeen: (v) => set({ introSeen: v }),
       saveAgent: (a) => set((s) => ({ agents: s.agents.some((x) => x.id === a.id) ? s.agents.map((x) => (x.id === a.id ? a : x)) : [...s.agents, a] })),
       removeAgent: (id) =>
         set((s) => ({
@@ -121,7 +126,7 @@ export const useStore = create<State>()(
       removeReminder: (id) => set((s) => ({ reminders: s.reminders.filter((r) => r.id !== id) })),
       saveSchedule: (x) => set((s) => ({ schedules: upsert(s.schedules, x) })),
       removeSchedule: (id) => set((s) => ({ schedules: s.schedules.filter((x) => x.id !== id) })),
-      resetAll: () => set({ agents: SEED_AGENTS, teams: SEED_TEAMS, tasks: [], reminders: [], schedules: [], settings: DEFAULT_SETTINGS }),
+      resetAll: () => set({ agents: SEED_AGENTS, teams: SEED_TEAMS, tasks: [], reminders: [], schedules: [], settings: DEFAULT_SETTINGS, introSeen: false }),
     }),
     {
       name: "plazai",

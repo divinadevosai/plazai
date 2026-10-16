@@ -18,15 +18,25 @@ import { Sky } from "../world/Sky";
 import { AvatarCard } from "./AvatarCard";
 import { BuildingCard, BuildingIcon } from "./BuildingCard";
 import { MenuButton } from "./Chrome";
+import { INTRO_CAMERA, TourCard, tourSteps, Welcome, type TourShot } from "./Tour";
 
 type Focus = { kind: "agent" | "building"; id: string } | null;
+/** What the camera follows: the selected avatar or building, or a guide shot. */
+type CamFocus = Focus | Extract<TourShot, { kind: "view" }>;
 
-export function Plaza({ nav }: { nav: Nav }) {
+export function Plaza({ nav, tour = false }: { nav: Nav; tour?: boolean }) {
   const agents = useStore((s) => s.agents);
   const teams = useStore((s) => s.teams);
   const tasks = useStore((s) => s.tasks);
   const github = useStore((s) => s.settings.github);
   const [focus, setFocus] = useState<Focus>(null);
+  const introSeen = useStore((s) => s.introSeen);
+  const setIntroSeen = useStore((s) => s.setIntroSeen);
+  // First visit: a welcome splash, then the guide. The ? button (or the Guide tile) replays the guide.
+  const [welcome, setWelcome] = useState(() => !introSeen && !tour);
+  const [tourStep, setTourStep] = useState<number | null>(() => (tour ? 0 : null));
+  const [startCam] = useState<[number, number, number]>(() => (!introSeen || tour ? INTRO_CAMERA : [0, 26, 38]));
+  const touring = tourStep !== null;
   const [who, setWho] = useState(() => (teams[0] ? `team:${teams[0].id}` : agents[0] ? `agent:${agents[0].id}` : ""));
   const [where, setWhere] = useState("auto");
   const repo = github.defaultRepo;
@@ -80,7 +90,30 @@ export function Plaza({ nav }: { nav: Nav }) {
     setUrgent(false);
   };
 
+  const finishTour = useCallback(() => {
+    setWelcome(false);
+    setTourStep(null);
+    setIntroSeen(true);
+  }, [setIntroSeen]);
+  const steps = tourSteps(agents.map((a) => a.name), lunch, sleep);
+  const shot = touring ? steps[tourStep]?.shot : undefined;
+  const firstAgent = agents[0]?.id;
+  const camFocus = useMemo<CamFocus>(() => {
+    if (welcome) return { kind: "view", pos: INTRO_CAMERA, target: [0, 0.5, 0] };
+    if (!shot) return focus;
+    if (shot.kind === "agent") return firstAgent ? { kind: "agent", id: firstAgent } : null;
+    return shot;
+    // shots are static per step, so the step index stands in for the object
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [welcome, tourStep, focus, firstAgent]);
+
+  const selectAgent = (id: string) => {
+    if (touring || welcome) finishTour();
+    setFocus({ kind: "agent", id });
+    setWho(`agent:${id}`);
+  };
   const selectBuilding = (id: string) => {
+    if (touring || welcome) finishTour();
     setFocus({ kind: "building", id });
     setWhere(id);
   };
@@ -100,7 +133,7 @@ export function Plaza({ nav }: { nav: Nav }) {
 
   return (
     <div className="plaza screen">
-      <Canvas shadows camera={{ position: [0, 26, 38], fov: 45 }} dpr={[1, 2]} onPointerMissed={() => setFocus(null)}>
+      <Canvas shadows camera={{ position: startCam, fov: 45 }} dpr={[1, 2]} onPointerMissed={() => setFocus(null)}>
         <Sky />
         <Island desks={agents.length} busy={activity.map((a) => a?.status === "working" && a.buildingId === "plaza")} />
         <Buildings busy={busy} celebrate={celebrate} selected={building?.id ?? null} onSelect={selectBuilding} />
@@ -113,18 +146,15 @@ export function Plaza({ nav }: { nav: Nav }) {
             index={i}
             count={agents.length}
             activity={activity[i] ?? null}
-            selected={focus?.kind === "agent" && focus.id === a.id}
-            onSelect={(id) => {
-              setFocus({ kind: "agent", id });
-              setWho(`agent:${id}`);
-            }}
+            selected={camFocus?.kind === "agent" && camFocus.id === a.id}
+            onSelect={selectAgent}
             positions={positions}
             onInside={onInside}
             phase={phase}
             onHome={onHome}
           />
         ))}
-        <CameraRig focus={focus} positions={positions} />
+        <CameraRig focus={camFocus} positions={positions} spin={welcome} />
         <LabelProjector agents={agents.map((a) => ({ id: a.id, h: 2.35 * a.look.height }))} positions={positions} labels={labels.current} />
       </Canvas>
 
@@ -189,11 +219,16 @@ export function Plaza({ nav }: { nav: Nav }) {
           {running ? `${running} task${running > 1 ? "s" : ""} in progress` : phase === "asleep" ? "🌙 Night time · everyone's asleep" : phase === "goingHome" ? "🌆 Heading home for the night" : phase === "lunch" ? `🥪 Lunch break until ${lunch.end}` : "Everyone's free"}
         </span>
         <div style={{ flex: 1 }} />
+        <button className="btn round-q" onClick={() => { setFocus(null); setWelcome(false); setTourStep(0); }} aria-label="How it works: replay the guide" title="How it works">?</button>
         <button className="btn" onClick={() => nav.go("calendar")}>Calendar</button>
         <button className="btn" onClick={() => nav.go("board")}>Message Board</button>
       </div>
 
-      {focusedAgent ? (
+      {welcome ? (
+        <Welcome onStart={() => { setWelcome(false); setTourStep(0); }} onSkip={finishTour} />
+      ) : touring ? (
+        <TourCard steps={steps} step={tourStep} onStep={setTourStep} onDone={finishTour} />
+      ) : focusedAgent ? (
         <AvatarCard key={focusedAgent.id} agent={focusedAgent} status={statusOf(focusedAgent, agents.indexOf(focusedAgent))} off={off} nav={nav} onClose={closeBuilding} />
       ) : building ? (
         <BuildingCard key={building.id} def={building} occupants={occupants(building.id)} nav={nav} onClose={closeBuilding} off={off} />
@@ -205,10 +240,7 @@ export function Plaza({ nav }: { nav: Nav }) {
               <button
                 key={a.id}
                 className={focus?.id === a.id ? "on" : ""}
-                onClick={() => {
-                  setFocus({ kind: "agent", id: a.id });
-                  setWho(`agent:${a.id}`);
-                }}
+                onClick={() => selectAgent(a.id)}
               >
                 <Portrait look={a.look} size={44} />
                 <span style={{ flex: 1, minWidth: 0 }}>
@@ -226,9 +258,9 @@ export function Plaza({ nav }: { nav: Nav }) {
         </div>
       )}
 
-      {!building && !focusedAgent && (
+      {!welcome && (!touring || steps[tourStep]?.quick) && !building && !focusedAgent && (
       <form
-        className="panel quick"
+        className={`panel quick ${touring ? "spotlight" : ""}`}
         onSubmit={(e) => {
           e.preventDefault();
           go();
@@ -301,11 +333,11 @@ const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t 
  * Clicking a building flies the camera to its front door; closing flies back to the whole town.
  * Selecting an avatar keeps the camera looking at them as they walk. Between flights you can orbit freely.
  */
-function CameraRig({ focus, positions }: { focus: Focus; positions: Map<string, THREE.Vector3> }) {
+function CameraRig({ focus, positions, spin }: { focus: CamFocus; positions: Map<string, THREE.Vector3>; spin: boolean }) {
   const controls = useRef<OrbitControlsImpl>(null);
   const camera = useThree((s) => s.camera);
-  const flight = useRef<{ fromPos: THREE.Vector3; fromTarget: THREE.Vector3; toPos: THREE.Vector3; toTarget: THREE.Vector3; t: number } | null>(null);
-  const prev = useRef<Focus>(null);
+  const flight = useRef<{ fromPos: THREE.Vector3; fromTarget: THREE.Vector3; toPos: THREE.Vector3; toTarget: THREE.Vector3; t: number; dur: number } | null>(null);
+  const prev = useRef<CamFocus>(null);
   const goal = useMemo(() => new THREE.Vector3(), []);
   const reduced = useMemo(() => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false, []);
 
@@ -316,7 +348,12 @@ function CameraRig({ focus, positions }: { focus: Focus; positions: Map<string, 
     if (!c) return;
     let toPos: THREE.Vector3 | null = null;
     let toTarget: THREE.Vector3 | null = null;
-    if (focus?.kind === "building") {
+    let dur = FLIGHT_S;
+    if (focus?.kind === "view") {
+      toPos = new THREE.Vector3(...focus.pos);
+      toTarget = new THREE.Vector3(...focus.target);
+      dur = focus.dur ?? FLIGHT_S;
+    } else if (focus?.kind === "building") {
       const s = buildingSpot(focus.id);
       const inward = new THREE.Vector3(-s.x, 0, -s.z).normalize();
       // The card sits on the right of the screen, so look a little to the building's right:
@@ -335,7 +372,7 @@ function CameraRig({ focus, positions }: { focus: Focus; positions: Map<string, 
       toPos = HOME_CAM.clone();
       toTarget = HOME_TARGET.clone();
     }
-    if (toPos && toTarget) flight.current = { fromPos: camera.position.clone(), fromTarget: c.target.clone(), toPos, toTarget, t: reduced ? 1 : 0 };
+    if (toPos && toTarget) flight.current = { fromPos: camera.position.clone(), fromTarget: c.target.clone(), toPos, toTarget, t: reduced ? 1 : 0, dur };
   }, [focus, camera, reduced]);
 
   useFrame((_, dt) => {
@@ -343,7 +380,7 @@ function CameraRig({ focus, positions }: { focus: Focus; positions: Map<string, 
     if (!c) return;
     const f = flight.current;
     if (f) {
-      f.t = Math.min(1, f.t + dt / FLIGHT_S);
+      f.t = Math.min(1, f.t + dt / f.dur);
       const k = easeInOut(f.t);
       camera.position.lerpVectors(f.fromPos, f.toPos, k);
       c.target.lerpVectors(f.fromTarget, f.toTarget, k);
@@ -357,7 +394,7 @@ function CameraRig({ focus, positions }: { focus: Focus; positions: Map<string, 
     }
     c.update();
   });
-  return <OrbitControls ref={controls} enablePan={false} minDistance={6} maxDistance={75} maxPolarAngle={1.35} minPolarAngle={0.35} />;
+  return <OrbitControls ref={controls} autoRotate={spin && !reduced} autoRotateSpeed={0.6} enablePan={false} minDistance={6} maxDistance={75} maxPolarAngle={1.35} minPolarAngle={0.35} />;
 }
 
 function useTick(ms: number) {
