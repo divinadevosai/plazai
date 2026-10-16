@@ -154,6 +154,29 @@ button { cursor: pointer; }
   body { overflow: auto; }
 }
 
+/* ---------- building view ---------- */
+.building-card { position: absolute; top: 84px; right: 24px; bottom: 24px; width: min(400px, calc(100% - 48px)); display: flex; flex-direction: column; overflow: hidden; z-index: 2;
+  transition: transform 260ms var(--ease-out), opacity 260ms var(--ease-out); }
+.building-card header { display: flex; align-items: flex-start; gap: 14px; padding: 18px 18px 16px; color: #fff; }
+.building-card header h2 { margin: 0; font-size: 24px; font-weight: 900; letter-spacing: -0.01em; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.12); }
+.building-card header p { margin: 4px 0 0; font-size: 14px; opacity: 0.95; line-height: 1.4; }
+.b-icon { flex: none; width: 52px; height: 52px; border-radius: 16px; background: #fff; display: grid; place-items: center; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.12); }
+.b-close { flex: none; margin-left: auto; width: 34px; height: 34px; border-radius: 50%; border: 0; background: rgba(255, 255, 255, 0.25); color: #fff; font-weight: 900; }
+.b-body { overflow: auto; padding: 4px 18px 18px; }
+.b-body section { padding: 14px 0; border-bottom: 1px solid var(--line); }
+.b-body section:last-child { border-bottom: 0; }
+.b-body h3 { margin: 0 0 8px; font-size: 12px; font-weight: 900; color: var(--mute); text-transform: uppercase; letter-spacing: 0.08em; }
+.b-body p { margin: 0; line-height: 1.5; }
+.b-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.b-list li { position: relative; padding-left: 22px; line-height: 1.4; }
+.b-list li::before { content: "✓"; position: absolute; left: 0; color: var(--ok); font-weight: 900; }
+.b-examples { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 12px; }
+.b-examples .chip { border: 0; text-align: left; font-size: 12.5px; padding: 6px 12px; }
+.bname { pointer-events: auto; cursor: pointer; border: 0; transition: transform 160ms var(--ease-out); display: inline-flex; align-items: center; gap: 7px; padding: 6px 13px 6px 8px; border-radius: 999px; background: rgba(255, 255, 255, 0.96); box-shadow: 0 3px 10px rgba(40, 60, 90, 0.18);
+  font: 900 16px "Nunito Variable", sans-serif; color: var(--ink); white-space: nowrap; }
+.bname:active { transform: scale(0.97); }
+.bname .ico { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: #f2f5f9; }
+
 /* ---------- modal ---------- */
 .modal { width: min(560px, calc(100% - 32px)); max-height: calc(100% - 48px); overflow: auto; padding: 24px; border: 0; color: var(--ink); animation: modalIn 220ms var(--ease-out); }
 .modal::backdrop { background: rgba(40, 50, 70, 0.35); backdrop-filter: blur(2px); animation: fadeIn 200ms ease; }
@@ -194,6 +217,7 @@ button { cursor: pointer; }
 .badge, .card, .chip { transition: opacity 220ms var(--ease-out), transform 220ms var(--ease-out); }
 @starting-style {
   .toast { opacity: 0; transform: translateY(100%) scale(0.96); }
+  .building-card { opacity: 0; transform: translateX(24px); }
   .thought { opacity: 0; transform: scale(0.94) translateY(4px); }
   .badge { opacity: 0; transform: scale(0.9); }
   .card { opacity: 0; transform: translateY(-6px); }
@@ -214,5 +238,6 @@ button { cursor: pointer; }
   .toast { transition: opacity 200ms ease; }
   @starting-style {
     .thought, .badge, .card, .toast { transform: translateY(var(--y, 0)) scale(var(--s, 1)); }
+    .building-card { transform: none; }
   }
 }

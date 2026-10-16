@@ -6,6 +6,12 @@ export interface BuildingDef {
   id: string;
   name: string;
   blurb: string;
+  /** What you'd find inside (shown in the building view). */
+  inside: string;
+  /** What avatars can do here. */
+  canDo: string[];
+  /** Example tasks you can tap to start. */
+  examples: string[];
   /** Extra guidance added to the agent's system prompt while working here. */
   expertise: string;
   /** Words in a task that send it here automatically. */
@@ -23,6 +29,9 @@ export const BUILDINGS: BuildingDef[] = [
     id: "servers",
     name: "Server Room",
     blurb: "Backend work: APIs, databases, servers and performance.",
+    inside: "Rows of humming server racks, blinking status lights and a big monitoring wall.",
+    canDo: ["Design REST and GraphQL APIs", "Plan database schemas and indexes", "Debug slow queries and timeouts", "Write backend code, migrations and scripts"],
+    examples: ["Design a REST API for a todo app with a database schema", "Why might my API be slow? Give me a checklist", "Write a Node.js endpoint that uploads images safely"],
     expertise: "You're in the Server Room doing backend engineering. Think about APIs, data models, databases, scaling, error handling and logging. Give concrete code, schemas or commands where they help.",
     keywords: /\b(backend|back-end|server|api|endpoint|database|db|postgres|sql schema|redis|queue|microservice|latency|scal(e|ing)|cache)\b/i,
     color: "#e9eef6",
@@ -33,6 +42,9 @@ export const BUILDINGS: BuildingDef[] = [
     id: "calendar",
     name: "Calendar Tower",
     blurb: "Reminders, schedules, plans and anything time-based.",
+    inside: "A giant wall calendar, a ticking clock and a desk covered in sticky notes.",
+    canDo: ["Turn goals into dated plans and timelines", "Plan your week or a project schedule", "Set reminders and repeating tasks (Calendar channel)"],
+    examples: ["Plan my week so I can ship a side project by Friday", "Make a 30-day content calendar for a new product", "Turn this goal into milestones with dates: launch my app"],
     expertise: "You're in the Calendar Tower. Focus on plans, schedules, deadlines and reminders. Turn requests into clear dated steps and timelines.",
     keywords: /\b(remind|reminder|schedule|calendar|deadline|meeting|agenda|timeline|plan (my|the) (week|day|month)|routine)\b/i,
     color: "#fff6e6",
@@ -43,6 +55,9 @@ export const BUILDINGS: BuildingDef[] = [
     id: "repo",
     name: "Repo HQ",
     blurb: "GitHub work: read repos, write changes, then upload a branch, pull request or new repo.",
+    inside: "Shelves of code, a big branch map on the wall and crates of commits ready to ship.",
+    canDo: ["Read your repo's README and file list", "Write or update whole files", "Upload changes as a branch + pull request", "Create a brand-new repo from their work"],
+    examples: ["Add a friendly README to my repo", "Add a contributing guide and issue templates", "Write a GitHub Actions workflow that runs the tests"],
     expertise:
       "You're in Repo HQ working on a code repository. Read the repository context you're given carefully. When you create or change files, output each complete file exactly like this:\nFILE: path/to/file.ext\n```\n<entire file content>\n```\nOnly output whole files, keep paths relative to the repo root, and explain your changes briefly before the files.",
     keywords: /\b(github|git hub|repo|repository|commit|pull request|\bpr\b|branch|readme|merge|push (to|the) (repo|github))\b/i,
@@ -54,6 +69,9 @@ export const BUILDINGS: BuildingDef[] = [
     id: "library",
     name: "Library",
     blurb: "Research, explanations, summaries and learning.",
+    inside: "Tall shelves, comfy reading chairs and a quiet corner for deep research.",
+    canDo: ["Research a topic and summarise it", "Explain things simply, at any level", "Compare options and list pros and cons"],
+    examples: ["Explain how vector databases work, simply", "Compare Postgres, MySQL and SQLite for a small app", "Summarise the history of the World Wide Web"],
     expertise: "You're in the Library doing research. Be accurate, cite what kind of source a claim would come from, separate facts from opinions, and summarise clearly.",
     keywords: /\b(research|summari[sz]e|explain|learn|study|compare|history of|what is|how does|sources?)\b/i,
     color: "#f6efe4",
@@ -64,6 +82,9 @@ export const BUILDINGS: BuildingDef[] = [
     id: "cafe",
     name: "Writers' Café",
     blurb: "Blog posts, emails, docs, captions and copy.",
+    inside: "Cosy tables, a coffee machine and writers tapping away on laptops.",
+    canDo: ["Write blog posts, emails and newsletters", "Draft docs, release notes and READMEs", "Write social posts, captions and bios"],
+    examples: ["Write a launch post for my new app", "Draft friendly release notes for version 1.1", "Write 3 tweets announcing a new feature"],
     expertise: "You're in the Writers' Café. Write clearly and warmly for the audience, with a strong opening, short paragraphs and a clear call to action where it fits.",
     keywords: /\b(write|writing|blog|post|email|newsletter|caption|copy|article|story|tweet|bio|docs?|documentation|press release)\b/i,
     color: "#fff1f4",
@@ -74,6 +95,9 @@ export const BUILDINGS: BuildingDef[] = [
     id: "studio",
     name: "Design Studio",
     blurb: "UI and UX ideas, layouts, branding and colour.",
+    inside: "Easels, colour swatches, sketchbooks and a big screen full of mockups.",
+    canDo: ["Plan UI layouts and user flows", "Suggest colour palettes and fonts", "Review a design for clarity and accessibility"],
+    examples: ["Design a landing page layout for a coffee subscription", "Suggest a colour palette and fonts for a calm meditation app", "How can I make my signup form easier to use?"],
     expertise: "You're in the Design Studio. Think about users, layout, hierarchy, accessibility, colour and typography. Describe designs precisely (spacing, sizes, colours as hex) and explain the reasoning.",
     keywords: /\b(design|ui|ux|layout|logo|brand(ing)?|colou?r palette|wireframe|mockup|figma|font|typography|landing page)\b/i,
     color: "#f3efff",
@@ -84,6 +108,9 @@ export const BUILDINGS: BuildingDef[] = [
     id: "lab",
     name: "Test Lab",
     blurb: "Code review, bug hunting, tests and QA.",
+    inside: "Test tubes, bubbling flasks and a wall of green and red test results.",
+    canDo: ["Review code for bugs and edge cases", "Write unit and end-to-end tests", "Make a QA checklist before a release"],
+    examples: ["Write unit tests for a password strength checker", "List edge cases for a date-picker component", "Make a QA checklist for releasing a web app"],
     expertise: "You're in the Test Lab. Look for bugs, edge cases and missing tests. Propose concrete test cases and fixes, ordered by severity.",
     keywords: /\b(test|tests|testing|bug|debug|qa|code review|review (my|this) code|edge cases?|unit tests?|e2e|crash|error)\b/i,
     color: "#e9f9fb",
@@ -94,6 +121,9 @@ export const BUILDINGS: BuildingDef[] = [
     id: "launch",
     name: "Launch Pad",
     blurb: "Deploys, CI/CD, Docker, hosting and releases.",
+    inside: "A control room with countdown screens, and a rocket waiting on the pad outside.",
+    canDo: ["Set up CI/CD pipelines", "Write Dockerfiles and deploy configs", "Plan releases, rollbacks and monitoring"],
+    examples: ["Write a Dockerfile for a Node.js app", "Set up a GitHub Actions deploy to Vercel", "Make a release checklist with a rollback plan"],
     expertise: "You're at the Launch Pad doing DevOps. Cover build, CI/CD, containers, hosting, environment variables, monitoring and rollback. Give exact config files and commands.",
     keywords: /\b(deploy|deployment|ci|cd|pipeline|docker|kubernetes|k8s|hosting|vercel|netlify|release|launch|devops|github actions)\b/i,
     color: "#eef1f5",
@@ -104,6 +134,9 @@ export const BUILDINGS: BuildingDef[] = [
     id: "vault",
     name: "Security Vault",
     blurb: "Security reviews, threat models and hardening.",
+    inside: "A heavy round vault door, security monitors and a very serious lock.",
+    canDo: ["Review code and setups for vulnerabilities", "Check auth, passwords and secrets handling", "Write a simple threat model"],
+    examples: ["Check a login form for security vulnerabilities", "How should I store API keys in my web app?", "Write a security checklist for a small SaaS"],
     expertise: "You're in the Security Vault. Review for vulnerabilities (auth, injection, secrets, access control, dependencies), rate each by severity, and give safe, concrete fixes. Never help attack systems you don't own.",
     keywords: /\b(security|secure|vulnerab\w*|auth(entication|orization)?|password|encrypt\w*|threat|pentest|xss|csrf|injection|secrets?|permissions)\b/i,
     color: "#eceff3",
@@ -114,6 +147,9 @@ export const BUILDINGS: BuildingDef[] = [
     id: "observatory",
     name: "Data Observatory",
     blurb: "Data analysis, SQL queries, metrics and charts.",
+    inside: "A rotating dome, a big telescope and screens full of charts and numbers.",
+    canDo: ["Analyse data and explain what it means", "Write SQL queries and spreadsheet formulas", "Choose the right chart and define metrics"],
+    examples: ["Write SQL to find my top 10 customers by revenue", "Which metrics should a new SaaS track?", "What chart should I use to show monthly signups?"],
     expertise: "You're in the Data Observatory. Work with data carefully: state assumptions, write correct SQL or code, suggest the right chart, and explain what the numbers mean.",
     keywords: /\b(data|analy[sz]e|analytics|metrics?|sql|query|chart|graph|spreadsheet|csv|kpi|dashboard|statistics|forecast)\b/i,
     color: "#eef3ff",

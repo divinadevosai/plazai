@@ -1,5 +1,5 @@
 import { OrbitControls } from "@react-three/drei";
-import { Canvas, useFrame } from "@react-three/fiber";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
@@ -11,6 +11,7 @@ import { BUILDINGS, buildingById, buildingSpot } from "../world/buildings";
 import { Buildings } from "../world/Buildings";
 import { Island } from "../world/Island";
 import { PlazaAgent, tail } from "../world/PlazaAgent";
+import { BuildingCard, BuildingIcon } from "./BuildingCard";
 import { MenuButton } from "./Chrome";
 
 type Focus = { kind: "agent" | "building"; id: string } | null;
@@ -19,12 +20,11 @@ export function Plaza({ nav }: { nav: Nav }) {
   const agents = useStore((s) => s.agents);
   const teams = useStore((s) => s.teams);
   const tasks = useStore((s) => s.tasks);
-  const reminders = useStore((s) => s.reminders);
   const github = useStore((s) => s.settings.github);
   const [focus, setFocus] = useState<Focus>(null);
   const [who, setWho] = useState(() => (teams[0] ? `team:${teams[0].id}` : agents[0] ? `agent:${agents[0].id}` : ""));
   const [where, setWhere] = useState("auto");
-  const [repo, setRepo] = useState(github.defaultRepo);
+  const repo = github.defaultRepo;
   const [prompt, setPrompt] = useState("");
   const [inside, setInside] = useState<Record<string, string>>({});
   const positions = useMemo(() => new Map<string, THREE.Vector3>(), []);
@@ -59,6 +59,7 @@ export function Plaza({ nav }: { nav: Nav }) {
     setWhere(id);
   };
   const building = focus?.kind === "building" ? buildingById(focus.id) : undefined;
+  const closeBuilding = useCallback(() => setFocus(null), []);
 
   return (
     <div className="plaza screen">
@@ -99,7 +100,7 @@ export function Plaza({ nav }: { nav: Nav }) {
         <LabelProjector agents={agents.map((a) => ({ id: a.id, h: 2.35 * a.look.height }))} positions={positions} labels={labels.current} />
       </Canvas>
 
-      <div className="labels" aria-hidden>
+      <div className="labels">
         {agents.map((a, i) => {
           const act = activity[i];
           const heading = act && !inside[a.id] && (act.status === "walking" || act.buildingId !== "plaza");
@@ -116,15 +117,22 @@ export function Plaza({ nav }: { nav: Nav }) {
         })}
         {BUILDINGS.map((b) => {
           const occ = occupants(b.id);
-          if (!occ.length) return null;
-          const first = activity[agents.indexOf(occ[0]!)];
+          const first = occ[0] ? activity[agents.indexOf(occ[0])] : null;
           return (
             <div key={b.id} className="label3d" ref={(el) => void (el ? labels.current.set(`b:${b.id}`, el) : labels.current.delete(`b:${b.id}`))}>
-              <div className="thought">{tail(first?.text ?? "") || "Working inside…"}</div>
-              <div className="tag" style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                {occ.map((a) => <Portrait key={a.id} look={a.look} size={20} />)}
-                {occ.map((a) => a.name).join(" & ")} inside
-              </div>
+              {occ.length > 0 && (
+                <>
+                  <div className="thought">{tail(first?.text ?? "") || "Working inside…"}</div>
+                  <div className="tag" style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    {occ.map((a) => <Portrait key={a.id} look={a.look} size={20} />)}
+                    {occ.map((a) => a.name).join(" & ")} inside
+                  </div>
+                </>
+              )}
+              <button className="bname" style={{ borderBottom: `3px solid ${b.roof}` }} onClick={() => selectBuilding(b.id)} aria-label={`Open the ${b.name}`}>
+                <span className="ico"><BuildingIcon def={b} size={17} /></span>
+                {b.name}
+              </button>
             </div>
           );
         })}
@@ -141,34 +149,7 @@ export function Plaza({ nav }: { nav: Nav }) {
       </div>
 
       {building ? (
-        <div className="panel plaza-side" key={building.id}>
-          <div className="row" style={{ justifyContent: "space-between", padding: "4px 6px 0" }}>
-            <h2 style={{ margin: 0, fontSize: 20 }}>{building.name}</h2>
-            <button className="btn small" onClick={() => setFocus(null)} aria-label="Close">✕</button>
-          </div>
-          <p className="hint" style={{ margin: "6px 6px 12px" }}>{building.blurb}</p>
-          <div className="field" style={{ margin: "0 6px 6px" }}><span>Inside now</span></div>
-          <p style={{ margin: "0 6px 12px" }}>{occupants(building.id).map((a) => a.name).join(", ") || <span className="hint">Nobody yet. Give someone a job here below.</span>}</p>
-          {building.id === "calendar" && (
-            <div style={{ margin: "0 6px 12px" }}>
-              <div className="field"><span>Coming up</span></div>
-              {reminders.filter((r) => !r.done).sort((a, b) => a.at - b.at).slice(0, 4).map((r) => (
-                <div key={r.id} className="hint">⏰ {r.text} · {new Date(r.at).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" })}</div>
-              ))}
-              <button className="btn small" style={{ marginTop: 8 }} onClick={() => nav.go("calendar")}>Open Calendar</button>
-            </div>
-          )}
-          {building.id === "repo" && (
-            <label className="field" style={{ margin: "0 6px 12px" }}>
-              <span>Repository</span>
-              <input className="input" placeholder="owner/name" value={repo} onChange={(e) => setRepo(e.target.value.trim())} />
-              <span className="hint" style={{ textTransform: "none", letterSpacing: 0, fontWeight: 600 }}>
-                {github.token ? "Using your GitHub token from Settings." : "Public repos can be read without a token. Add one in Settings to upload."}
-              </span>
-            </label>
-          )}
-          <button className="btn small" style={{ margin: "0 6px" }} onClick={() => nav.go("tasks", { buildingId: building.id })}>Open in Tasks</button>
-        </div>
+        <BuildingCard key={building.id} def={building} occupants={occupants(building.id)} nav={nav} onClose={closeBuilding} />
       ) : (
         <div className="panel plaza-side">
           {agents.map((a, i) => {
@@ -199,6 +180,7 @@ export function Plaza({ nav }: { nav: Nav }) {
         </div>
       )}
 
+      {!building && (
       <form
         className="panel quick"
         onSubmit={(e) => {
@@ -218,6 +200,7 @@ export function Plaza({ nav }: { nav: Nav }) {
         <input className="input" placeholder="Give them a task…" value={prompt} onChange={(e) => setPrompt(e.target.value)} aria-label="Task" />
         <button className="btn primary" disabled={!prompt.trim() || !who}>Go!</button>
       </form>
+      )}
     </div>
   );
 }
@@ -225,7 +208,7 @@ export function Plaza({ nav }: { nav: Nav }) {
 /** Keeps DOM labels pinned above avatars' heads and building roofs (no React re-render per frame). */
 function LabelProjector({ agents, positions, labels }: { agents: { id: string; h: number }[]; positions: Map<string, THREE.Vector3>; labels: Map<string, HTMLDivElement> }) {
   const v = useMemo(() => new THREE.Vector3(), []);
-  const roofs = useMemo(() => BUILDINGS.map((b) => ({ id: `b:${b.id}`, p: buildingSpot(b.id), h: b.id === "calendar" ? 8.6 : 5.8 })), []);
+  const roofs = useMemo(() => BUILDINGS.map((b) => ({ id: `b:${b.id}`, p: buildingSpot(b.id), h: ROOF_LABEL[b.id] ?? 5.9 })), []);
   useFrame(({ camera, size }) => {
     const place = (key: string, x: number, y: number, z: number) => {
       const el = labels.get(key);
@@ -252,21 +235,61 @@ function LabelProjector({ agents, positions, labels }: { agents: { id: string; h
   return null;
 }
 
-/** Eases the camera's focus toward the selected avatar or building (and back to the fountain). */
+const ROOF_LABEL: Record<string, number> = { calendar: 8.9, library: 6.5, observatory: 6.3, lab: 5.6, launch: 4.9, cafe: 5.4 };
+const HOME_CAM = new THREE.Vector3(0, 26, 38);
+const HOME_TARGET = new THREE.Vector3(0, 0.5, 0);
+const FLIGHT_S = 1.1;
+const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+
+/**
+ * Clicking a building flies the camera to its front door; closing flies back to the whole town.
+ * Selecting an avatar keeps the camera looking at them as they walk. Between flights you can orbit freely.
+ */
 function CameraRig({ focus, positions }: { focus: Focus; positions: Map<string, THREE.Vector3> }) {
   const controls = useRef<OrbitControlsImpl>(null);
+  const camera = useThree((s) => s.camera);
+  const flight = useRef<{ fromPos: THREE.Vector3; fromTarget: THREE.Vector3; toPos: THREE.Vector3; toTarget: THREE.Vector3; t: number } | null>(null);
+  const prev = useRef<Focus>(null);
   const goal = useMemo(() => new THREE.Vector3(), []);
+  const reduced = useMemo(() => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false, []);
+
+  useEffect(() => {
+    const c = controls.current;
+    const was = prev.current;
+    prev.current = focus;
+    if (!c) return;
+    let toPos: THREE.Vector3 | null = null;
+    let toTarget: THREE.Vector3 | null = null;
+    if (focus?.kind === "building") {
+      const s = buildingSpot(focus.id);
+      const inward = new THREE.Vector3(-s.x, 0, -s.z).normalize();
+      // The card sits on the right of the screen, so look a little to the building's right:
+      // that keeps the front door in the open left-hand side of the view, seen head-on.
+      const right = new THREE.Vector3(inward.z, 0, -inward.x);
+      toTarget = new THREE.Vector3(s.x, 2.6, s.z).addScaledVector(right, 3.4);
+      toPos = toTarget.clone().addScaledVector(inward, 13).setY(6.5);
+    } else if (!focus && was?.kind === "building") {
+      toPos = HOME_CAM.clone();
+      toTarget = HOME_TARGET.clone();
+    }
+    if (toPos && toTarget) flight.current = { fromPos: camera.position.clone(), fromTarget: c.target.clone(), toPos, toTarget, t: reduced ? 1 : 0 };
+  }, [focus, camera, reduced]);
+
   useFrame((_, dt) => {
     const c = controls.current;
     if (!c) return;
-    if (focus?.kind === "agent") {
+    const f = flight.current;
+    if (f) {
+      f.t = Math.min(1, f.t + dt / FLIGHT_S);
+      const k = easeInOut(f.t);
+      camera.position.lerpVectors(f.fromPos, f.toPos, k);
+      c.target.lerpVectors(f.fromTarget, f.toTarget, k);
+      if (f.t >= 1) flight.current = null;
+    } else if (focus?.kind === "agent") {
       const p = positions.get(focus.id);
       goal.set(p?.x ?? 0, 1, p?.z ?? 0);
-    } else if (focus?.kind === "building") {
-      const s = buildingSpot(focus.id);
-      goal.set(s.x * 0.85, 2, s.z * 0.85);
-    } else goal.set(0, 0.5, 0);
-    c.target.lerp(goal, Math.min(1, dt * 2.5));
+      c.target.lerp(goal, Math.min(1, dt * 2.5));
+    }
     c.update();
   });
   return <OrbitControls ref={controls} enablePan={false} minDistance={6} maxDistance={75} maxPolarAngle={1.35} minPolarAngle={0.35} />;

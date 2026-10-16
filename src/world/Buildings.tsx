@@ -24,14 +24,13 @@ function useSign(def: BuildingDef) {
         (ctx, w, h) => {
           ctx.fillStyle = "#ffffff";
           ctx.beginPath();
-          ctx.roundRect(4, 4, w - 8, h - 8, 44);
+          ctx.roundRect(0, 0, w, h, 36);
           ctx.fill();
           ctx.strokeStyle = def.roof;
-          ctx.lineWidth = 8;
-          ctx.stroke();
+
           ctx.save();
-          ctx.translate(34, h / 2 - 42);
-          ctx.scale(3.5, 3.5);
+          ctx.translate(48, h / 2 - 66);
+          ctx.scale(5.5, 5.5);
           ctx.strokeStyle = def.roof;
           ctx.lineWidth = 2;
           ctx.lineCap = "round";
@@ -39,12 +38,12 @@ function useSign(def: BuildingDef) {
           ctx.stroke(new Path2D(def.icon));
           ctx.restore();
           ctx.fillStyle = INK;
-          ctx.font = `800 ${def.name.length > 13 ? 50 : 58}px "Nunito Variable", "Nunito", system-ui, sans-serif`;
+          ctx.font = `900 ${def.name.length > 13 ? 92 : 108}px "Nunito Variable", "Nunito", system-ui, sans-serif`;
           ctx.textBaseline = "middle";
-          ctx.fillText(def.name, 138, h / 2 + 3, w - 160);
+          ctx.fillText(def.name, 216, h / 2 + 6, w - 248);
         },
-        640,
-        160,
+        1024,
+        256,
       ),
     [def],
   );
@@ -107,15 +106,56 @@ function Building({ def, busy, celebrate, selected, onSelect }: { def: BuildingD
         <boxGeometry args={[1.1, 1.7, 0.08]} />
         <meshStandardMaterial color={busy ? "#ffe4a3" : "#6b5a4a"} emissive={busy ? "#ffcf6b" : "#000000"} emissiveIntensity={busy ? 0.5 : 0} />
       </mesh>
-      <mesh position={[0, signY(def.id), 2.08]}>
-        <planeGeometry args={[3.6, 0.9]} />
-        <meshStandardMaterial map={sign} transparent roughness={0.6} />
-      </mesh>
+      <Sign def={def} map={sign} />
     </group>
   );
 }
 
-const signY = (id: string) => (id === "calendar" ? 2.35 : id === "launch" ? 2.25 : 2.6);
+/**
+ * Where each building's sign goes: big rooftop billboards on posts where the roof allows,
+ * otherwise as wide as the front wall. Signs are 4:1, so height = width / 4.
+ */
+const SIGNS: Record<string, { y: number; z: number; w: number; posts?: number }> = {
+  servers: { y: 4.35, z: 1.3, w: 5.4, posts: 3.45 },
+  calendar: { y: 2.5, z: 1.73, w: 3.3 },
+  repo: { y: 2.35, z: 2.06, w: 4.7 },
+  library: { y: 5.0, z: 0.9, w: 5.4, posts: 3.3 },
+  cafe: { y: 3.95, z: 1.0, w: 5.0, posts: 3.1 },
+  studio: { y: 4.45, z: 1.3, w: 5.2, posts: 3.4 },
+  lab: { y: 2.15, z: 2.04, w: 4.4 },
+  launch: { y: 3.2, z: 1.3, w: 4.4, posts: 2.4 },
+  vault: { y: 4.3, z: 1.3, w: 5.4, posts: 3.45 },
+  observatory: { y: 3.15, z: 2.5, w: 4.2, posts: 0 },
+};
+
+function Sign({ def, map }: { def: BuildingDef; map: THREE.Texture }) {
+  const s = SIGNS[def.id] ?? { y: 2.6, z: 2.06, w: 4.4 };
+  const h = s.w / 4;
+  const postFrom = s.posts;
+  return (
+    <group position={[0, s.y, s.z]}>
+      <mesh castShadow>
+        <boxGeometry args={[s.w + 0.12, h + 0.12, 0.08]} />
+        <meshStandardMaterial color={def.roof} roughness={0.5} />
+      </mesh>
+      <mesh position={[0, 0, 0.045]}>
+        <planeGeometry args={[s.w, h]} />
+        {/* a soft glow keeps signs readable on the shady side of the island */}
+        <meshStandardMaterial map={map} emissiveMap={map} emissive="#ffffff" emissiveIntensity={0.55} roughness={0.55} />
+      </mesh>
+      {postFrom !== undefined &&
+        [-s.w * 0.35, s.w * 0.35].map((x) => {
+          const len = s.y - h / 2 - postFrom;
+          return (
+            <mesh key={x} position={[x, -h / 2 - len / 2, -0.05]} castShadow>
+              <cylinderGeometry args={[0.07, 0.07, len, 8]} />
+              <meshStandardMaterial color="#8e98a8" />
+            </mesh>
+          );
+        })}
+    </group>
+  );
+}
 
 type Mat = React.ReactElement;
 
