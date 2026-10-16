@@ -11,6 +11,10 @@ import { BUILDINGS, buildingById, buildingSpot } from "../world/buildings";
 import { Buildings } from "../world/Buildings";
 import { Island } from "../world/Island";
 import { PlazaAgent, tail } from "../world/PlazaAgent";
+import { clockNow, sleepPhase } from "../clock";
+import { Homes, homeSpot, type HomeState } from "../world/Homes";
+import { Sky } from "../world/Sky";
+import { AvatarCard } from "./AvatarCard";
 import { BuildingCard, BuildingIcon } from "./BuildingCard";
 import { MenuButton } from "./Chrome";
 
@@ -27,9 +31,14 @@ export function Plaza({ nav }: { nav: Nav }) {
   const repo = github.defaultRepo;
   const [prompt, setPrompt] = useState("");
   const [inside, setInside] = useState<Record<string, string>>({});
+  const [homes, setHomes] = useState<Record<string, HomeState>>({});
+  const [urgent, setUrgent] = useState(false);
+  const sleep = useStore((s) => s.settings.sleep);
   const positions = useMemo(() => new Map<string, THREE.Vector3>(), []);
   const labels = useRef(new Map<string, HTMLDivElement>());
   const now = useTick(1000);
+  const phase = sleepPhase(sleep, clockNow());
+  const asleep = phase === "asleep";
 
   const activity = agents.map((a) => activityOf(tasks, a.id));
   const justDone = agents.map((a) => tasks.some((t) => t.steps.some((s) => s.agentId === a.id && s.status === "done" && s.endedAt && now - s.endedAt < 6000)));
@@ -37,6 +46,15 @@ export function Plaza({ nav }: { nav: Nav }) {
   const occupants = (bid: string) => agents.filter((a) => inside[a.id] === bid);
   const busy = Object.fromEntries(BUILDINGS.map((b) => [b.id, occupants(b.id).length]));
   const celebrate = { launch: tasks.some((t) => t.buildingId === "launch" && t.status === "done" && t.finishedAt && now - t.finishedAt < 4000) };
+
+  const onHome = useCallback((id: string, st: HomeState | null) => {
+    setHomes((m) => {
+      const next = { ...m };
+      if (st) next[id] = st;
+      else delete next[id];
+      return next;
+    });
+  }, []);
 
   const onInside = useCallback((id: string, bid: string | null) => {
     setInside((m) => {
@@ -50,8 +68,9 @@ export function Plaza({ nav }: { nav: Nav }) {
   const go = () => {
     if (!prompt.trim() || !who) return;
     const [kind, id] = who.split(":") as ["agent" | "team", string];
-    assign("", prompt, { kind, id }, { buildingId: where, repo: where === "repo" || where === "auto" ? repo : undefined });
+    assign("", prompt, { kind, id }, { buildingId: where, repo: where === "repo" || where === "auto" ? repo : undefined, urgent: asleep && urgent });
     setPrompt("");
+    setUrgent(false);
   };
 
   const selectBuilding = (id: string) => {
@@ -60,26 +79,24 @@ export function Plaza({ nav }: { nav: Nav }) {
   };
   const building = focus?.kind === "building" ? buildingById(focus.id) : undefined;
   const closeBuilding = useCallback(() => setFocus(null), []);
+  const focusedAgent = focus?.kind === "agent" ? agents.find((a) => a.id === focus.id) : undefined;
+  const statusOf = (a: (typeof agents)[number], i: number) => {
+    const act = activity[i];
+    const b = act ? buildingById(act.buildingId) : undefined;
+    if (act) return inside[a.id] ? `Working in the ${b?.name}` : act.urgent ? "⚡ Rushing to an urgent job!" : `Heading to the ${b?.name ?? "desks"}…`;
+    if (homes[a.id] === "asleep") return "😴 Asleep at home";
+    if (homes[a.id] === "homeAwake") return "🏠 At home, winding down";
+    if (phase === "goingHome") return "Heading home for the night";
+    return "Free to help";
+  };
 
   return (
     <div className="plaza screen">
       <Canvas shadows camera={{ position: [0, 26, 38], fov: 45 }} dpr={[1, 2]} onPointerMissed={() => setFocus(null)}>
-        <color attach="background" args={["#bfe9ff"]} />
-        <fog attach="fog" args={["#bfe9ff", 60, 140]} />
-        <hemisphereLight args={["#e6f6ff", "#8fd16f", 0.9]} />
-        <directionalLight
-          position={[16, 28, 12]}
-          intensity={1.8}
-          castShadow
-          shadow-mapSize={[3072, 3072]}
-          shadow-camera-left={-32}
-          shadow-camera-right={32}
-          shadow-camera-top={32}
-          shadow-camera-bottom={-32}
-          shadow-bias={-0.0004}
-        />
+        <Sky />
         <Island desks={agents.length} busy={activity.map((a) => a?.status === "working" && a.buildingId === "plaza")} />
         <Buildings busy={busy} celebrate={celebrate} selected={building?.id ?? null} onSelect={selectBuilding} />
+        <Homes agents={agents} states={homes} />
         {agents.map((a, i) => (
           <PlazaAgent
             key={a.id}
@@ -94,6 +111,8 @@ export function Plaza({ nav }: { nav: Nav }) {
             }}
             positions={positions}
             onInside={onInside}
+            phase={phase}
+            onHome={onHome}
           />
         ))}
         <CameraRig focus={focus} positions={positions} />
@@ -105,10 +124,11 @@ export function Plaza({ nav }: { nav: Nav }) {
           const act = activity[i];
           const heading = act && !inside[a.id] && (act.status === "walking" || act.buildingId !== "plaza");
           const thought = heading
-            ? `On my way to the ${buildingById(act.buildingId)?.name ?? "desks"}!`
+            ? act.urgent ? "⚡ Urgent! On my way!" : `On my way to the ${buildingById(act.buildingId)?.name ?? "desks"}!`
+            : !act && phase === "goingHome" ? "Heading home 🌙"
             : act?.status === "working" ? tail(act.text) || "Thinking…" : null;
           return (
-            <div key={a.id} className="label3d" ref={(el) => void (el ? labels.current.set(a.id, el) : labels.current.delete(a.id))} style={inside[a.id] ? { display: "none" } : undefined}>
+            <div key={a.id} className="label3d" ref={(el) => void (el ? labels.current.set(a.id, el) : labels.current.delete(a.id))} style={inside[a.id] || homes[a.id] ? { display: "none" } : undefined}>
               {thought && <div className="thought">{thought}</div>}
               {!act && justDone[i] && <div className="thought done">✓ Done!</div>}
               <div className="tag">{a.name}</div>
@@ -136,25 +156,37 @@ export function Plaza({ nav }: { nav: Nav }) {
             </div>
           );
         })}
+        {agents.map((a, i) => {
+          const st = homes[a.id];
+          return (
+            <div key={`h:${a.id}`} className="label3d" ref={(el) => void (el ? labels.current.set(`h:${a.id}`, el) : labels.current.delete(`h:${a.id}`))} style={st ? undefined : { display: "none" }}>
+              {st === "asleep" && <div className="thought zzz">💤 Zzz…</div>}
+              <div className="tag">{st === "asleep" ? `${a.name} is asleep` : `${a.name}'s home`}</div>
+              {/* keep index used for stable ordering */}
+              <span hidden>{i}</span>
+            </div>
+          );
+        })}
       </div>
 
       <div className="overlay-top">
         <MenuButton nav={nav} />
         <span className="chip" style={{ background: "#fff", fontSize: 15, padding: "8px 16px" }}>
-          {running ? `${running} task${running > 1 ? "s" : ""} in progress` : "Everyone's free"}
+          {running ? `${running} task${running > 1 ? "s" : ""} in progress` : asleep ? "🌙 Night time · everyone's asleep" : phase === "goingHome" ? "🌆 Heading home for the night" : "Everyone's free"}
         </span>
         <div style={{ flex: 1 }} />
         <button className="btn" onClick={() => nav.go("calendar")}>Calendar</button>
         <button className="btn" onClick={() => nav.go("board")}>Message Board</button>
       </div>
 
-      {building ? (
-        <BuildingCard key={building.id} def={building} occupants={occupants(building.id)} nav={nav} onClose={closeBuilding} />
+      {focusedAgent ? (
+        <AvatarCard key={focusedAgent.id} agent={focusedAgent} status={statusOf(focusedAgent, agents.indexOf(focusedAgent))} asleep={asleep} nav={nav} onClose={closeBuilding} />
+      ) : building ? (
+        <BuildingCard key={building.id} def={building} occupants={occupants(building.id)} nav={nav} onClose={closeBuilding} asleep={asleep} />
       ) : (
         <div className="panel plaza-side">
           {agents.map((a, i) => {
             const act = activity[i];
-            const b = act ? buildingById(act.buildingId) : undefined;
             return (
               <button
                 key={a.id}
@@ -168,7 +200,7 @@ export function Plaza({ nav }: { nav: Nav }) {
                 <span style={{ flex: 1, minWidth: 0 }}>
                   <b>{a.name}</b>
                   <div className="hint" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {act ? (inside[a.id] ? `In the ${b?.name}` : act.status === "working" && !b ? "Working at the desks" : `Heading to the ${b?.name ?? "desks"}…`) : a.role}
+                    {act || homes[a.id] || phase !== "awake" ? statusOf(a, i) : a.role}
                   </div>
                 </span>
                 <span className="dot" style={{ background: act ? "var(--warn)" : justDone[i] ? "var(--ok)" : "#cfd8e4" }} />
@@ -180,7 +212,7 @@ export function Plaza({ nav }: { nav: Nav }) {
         </div>
       )}
 
-      {!building && (
+      {!building && !focusedAgent && (
       <form
         className="panel quick"
         onSubmit={(e) => {
@@ -198,7 +230,12 @@ export function Plaza({ nav }: { nav: Nav }) {
           {BUILDINGS.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
         </select>
         <input className="input" placeholder="Give them a task…" value={prompt} onChange={(e) => setPrompt(e.target.value)} aria-label="Task" />
-        <button className="btn primary" disabled={!prompt.trim() || !who}>Go!</button>
+        {asleep && (
+          <button type="button" className={`btn ${urgent ? "primary" : ""}`} onClick={() => setUrgent(!urgent)} aria-pressed={urgent} title="Wake them up for this one">
+            {urgent ? "⚡ Urgent" : "😴 Morning"}
+          </button>
+        )}
+        <button className="btn primary" disabled={!prompt.trim() || !who}>{asleep && !urgent ? "Queue" : "Go!"}</button>
       </form>
       )}
     </div>
@@ -231,6 +268,10 @@ function LabelProjector({ agents, positions, labels }: { agents: { id: string; h
       if (p) place(a.id, p.x, a.h, p.z);
     }
     for (const r of roofs) place(r.id, r.p.x, r.h, r.p.z);
+    agents.forEach((a, i) => {
+      const h = homeSpot(i, agents.length);
+      place(`h:${a.id}`, h.x, 3.4, h.z);
+    });
   });
   return null;
 }
@@ -268,7 +309,14 @@ function CameraRig({ focus, positions }: { focus: Focus; positions: Map<string, 
       const right = new THREE.Vector3(inward.z, 0, -inward.x);
       toTarget = new THREE.Vector3(s.x, 2.6, s.z).addScaledVector(right, 3.4);
       toPos = toTarget.clone().addScaledVector(inward, 13).setY(6.5);
-    } else if (!focus && was?.kind === "building") {
+    } else if (focus?.kind === "agent") {
+      // Swing round to face them, a little to their right so the card doesn't cover them.
+      const p = positions.get(focus.id) ?? new THREE.Vector3();
+      const away = camera.position.clone().sub(p).setY(0).normalize();
+      const right = new THREE.Vector3(-away.z, 0, away.x);
+      toTarget = new THREE.Vector3(p.x, 1.4, p.z).addScaledVector(right, -1.2);
+      toPos = toTarget.clone().addScaledVector(away, 6.5).setY(3.2);
+    } else if (!focus && was) {
       toPos = HOME_CAM.clone();
       toTarget = HOME_TARGET.clone();
     }
@@ -286,8 +334,10 @@ function CameraRig({ focus, positions }: { focus: Focus; positions: Map<string, 
       c.target.lerpVectors(f.fromTarget, f.toTarget, k);
       if (f.t >= 1) flight.current = null;
     } else if (focus?.kind === "agent") {
+      // Keep them in view if they walk off, with the same offset as the fly-in.
       const p = positions.get(focus.id);
-      goal.set(p?.x ?? 0, 1, p?.z ?? 0);
+      const away = camera.position.clone().sub(c.target).setY(0).normalize();
+      goal.set(p?.x ?? 0, 1.4, p?.z ?? 0).add(new THREE.Vector3(away.z, 0, -away.x).multiplyScalar(1.2));
       c.target.lerp(goal, Math.min(1, dt * 2.5));
     }
     c.update();

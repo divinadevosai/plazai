@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { Portrait } from "../avatar/Portrait";
 import { parseFiles } from "../engine/files";
-import { stopTask } from "../engine/run";
+import { stopTask, wakeFor } from "../engine/run";
 import { buildingById } from "../world/buildings";
 import { UploadDialog } from "./Upload";
 import { useStore } from "../store";
 import type { Task } from "../types";
 
 const STATUS: Record<Task["status"], [string, string]> = {
+  queued: ["Waiting for morning", "#8a6ce0"],
   running: ["In progress", "var(--warn)"],
   done: ["Done", "var(--ok)"],
   failed: ["Something went wrong", "var(--bad)"],
@@ -72,7 +73,7 @@ export function TaskCard({ task, open = true }: { task: Task; open?: boolean }) 
                       {s.demo && <span className="chip" style={{ fontSize: 11 }}>demo</span>}
                     </div>
                     <div className={`bubble ${live ? "live" : ""}`}>
-                      {s.output || (s.status === "waiting" ? "Waiting for my turn…" : s.status === "walking" ? "On my way to my desk…" : s.status === "working" ? "Thinking…" : "—")}
+                      {s.output || (task.status === "queued" ? "Zzz… I'll do this first thing in the morning." : s.status === "waiting" ? "Waiting for my turn…" : s.status === "walking" ? "On my way to my desk…" : s.status === "working" ? "Thinking…" : "—")}
                     </div>
                   </div>
                 </div>
@@ -80,7 +81,12 @@ export function TaskCard({ task, open = true }: { task: Task; open?: boolean }) 
             })}
           </div>
           <div className="row" style={{ marginTop: 14, justifyContent: "flex-end" }}>
-            {task.status === "running" ? (
+            {task.status === "queued" ? (
+              <>
+                <button className="btn small primary" onClick={() => wakeFor(task.id)}>⚡ Urgent: wake them now</button>
+                <button className="btn small danger" onClick={() => removeTask(task.id)}>Cancel</button>
+              </>
+            ) : task.status === "running" ? (
               <button className="btn small" onClick={() => stopTask(task.id)}>Stop</button>
             ) : (
               <>

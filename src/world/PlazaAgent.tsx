@@ -2,9 +2,11 @@ import { useFrame } from "@react-three/fiber";
 import { useRef } from "react";
 import * as THREE from "three";
 import { Avatar3D, type Pose } from "../avatar/Avatar3D";
+import type { SleepPhase } from "../clock";
 import type { Activity } from "../store";
 import type { Agent } from "../types";
 import { buildingSpot, PLAZA_ID } from "./buildings";
+import { homeSpot, type HomeState } from "./Homes";
 import { deskSpot } from "./Island";
 
 const SPEED = 1.7;
@@ -17,8 +19,13 @@ interface Props {
   index: number;
   count: number;
   activity: Activity | null;
+  /** Bedtime routine: awake, heading home, or asleep. */
+  phase: SleepPhase;
   /** Called when the avatar steps inside a building (or comes back out). */
   onInside: (id: string, buildingId: string | null) => void;
+  /** Called when the avatar goes into (or leaves) their own house. */
+  onHome: (id: string, state: HomeState | null) => void;
+  /** Selected avatars stop, turn to the camera and wave. */
   selected: boolean;
   onSelect: (id: string) => void;
   positions: Map<string, THREE.Vector3>;
@@ -30,39 +37,87 @@ function wanderPoint() {
   return new THREE.Vector3(Math.cos(a) * d, 0, Math.sin(a) * d);
 }
 
-/** One avatar living in the plaza: wanders when free, walks to its desk and works when busy. */
-export function PlazaAgent({ agent, index, count, activity, selected, onSelect, positions, onInside }: Props) {
+const v3 = (p: { x: number; z: number }) => new THREE.Vector3(p.x, 0, p.z);
+
+/**
+ * One avatar living in the plaza. By day they wander, and walk to a desk or building when given work.
+ * In the evening they head home; at bedtime the lights go out. Urgent work gets them up and running.
+ */
+export function PlazaAgent({ agent, index, count, activity, phase, selected, onSelect, positions, onInside, onHome }: Props) {
   const group = useRef<THREE.Group>(null);
   const pose = useRef<Pose>("idle");
-  const state = useRef({ pos: wanderPoint(), target: wanderPoint(), pauseUntil: 0, wasBusy: false, celebrate: false, inside: null as string | null, facing: Math.random() * Math.PI * 2 });
+  const home = homeSpot(index, count);
+  // If Plazai opens at night, they're already tucked up at home.
+  const startHome = phase === "asleep" && !activity;
+  const state = useRef({
+    pos: startHome ? v3(home.door) : wanderPoint(),
+    target: wanderPoint(),
+    pauseUntil: 0,
+    wasBusy: false,
+    celebrate: false,
+    inside: null as string | null,
+    atHome: null as HomeState | null,
+    homeReported: false,
+    selectedAt: -1,
+    wasSelected: false,
+    facing: Math.random() * Math.PI * 2,
+  });
   const busy = activity !== null;
 
-  useFrame(({ clock }, dt) => {
+  useFrame(({ clock, camera }, dt) => {
     const s = state.current;
     const now = clock.elapsedTime;
     const spot = deskSpot(index, count);
     const inBuilding = busy && activity!.buildingId !== PLAZA_ID;
     const door = inBuilding ? buildingSpot(activity!.buildingId).door : null;
+    const bedtime = phase !== "awake";
+
+    if (startHome && !s.homeReported) {
+      s.homeReported = true;
+      s.atHome = "asleep";
+      onHome(agent.id, "asleep");
+    }
+    if (selected && !s.wasSelected) s.selectedAt = now;
+    s.wasSelected = selected;
+
+    const leaveHome = () => {
+      if (!s.atHome) return;
+      s.atHome = null;
+      onHome(agent.id, null);
+      s.pos.copy(v3(home.door));
+    };
+
     if (busy) {
-      s.target = door ? new THREE.Vector3(door.x, 0, door.z) : spot.stand;
+      leaveHome(); // urgent work wakes them up
+      s.target = door ? v3(door) : spot.stand;
       s.wasBusy = true;
       s.pauseUntil = 0;
     } else if (s.wasBusy) {
       if (s.inside) {
         s.inside = null;
         onInside(agent.id, null);
-        if (group.current) group.current.visible = true;
       }
-      // just finished: stay a moment to celebrate, then wander off
+      // just finished: a little celebration, then wander off (or back to bed)
       s.wasBusy = false;
       s.celebrate = true;
       s.pauseUntil = now + 2.5;
-      s.target = wanderPoint();
-    } else if (s.pos.distanceTo(s.target) < 0.15 && now > s.pauseUntil) {
-      // reached a stroll target: rest a little, then pick somewhere new
-      s.celebrate = false;
-      s.pauseUntil = now + 1 + Math.random() * 4;
-      s.target = wanderPoint();
+      s.target = bedtime ? v3(home.door) : wanderPoint();
+    } else if (bedtime) {
+      s.target = v3(home.door);
+      const arrived = s.pos.distanceTo(s.target) < 0.3;
+      const want: HomeState = phase === "asleep" ? "asleep" : "homeAwake";
+      if (arrived && s.atHome !== want) {
+        s.atHome = want;
+        onHome(agent.id, want);
+      }
+    } else {
+      leaveHome(); // good morning!
+      if (s.pos.distanceTo(s.target) < 0.15 && now > s.pauseUntil) {
+        // reached a stroll target: rest a little, then pick somewhere new
+        s.celebrate = false;
+        s.pauseUntil = now + 1 + Math.random() * 4;
+        s.target = wanderPoint();
+      }
     }
 
     const to = s.target.clone().sub(s.pos);
@@ -72,23 +127,34 @@ export function PlazaAgent({ agent, index, count, activity, selected, onSelect, 
     if (shouldBeInside !== s.inside) {
       s.inside = shouldBeInside;
       onInside(agent.id, shouldBeInside);
-      if (group.current) group.current.visible = !shouldBeInside;
     }
-    const moving = dist > 0.08 && (busy || now > s.pauseUntil);
+    if (group.current) group.current.visible = !s.inside && !s.atHome;
+
+    // Selected (and free): stop, turn to the camera, and wave hello.
+    const posing = selected && !busy && !s.atHome;
+    const moving = !posing && dist > 0.08 && (busy || bedtime || now > s.pauseUntil);
     if (moving) {
       to.normalize();
-      s.pos.addScaledVector(to, Math.min(dist, (busy ? SPEED * 3 : SPEED) * dt));
+      const speed = busy ? SPEED * (activity!.urgent ? 4.5 : 3) : bedtime ? SPEED * 1.4 : SPEED;
+      s.pos.addScaledVector(to, Math.min(dist, speed * dt));
       // slide around the fountain instead of walking through it
       const r = Math.hypot(s.pos.x, s.pos.z);
       if (r < FOUNTAIN_R) s.pos.multiplyScalar(FOUNTAIN_R / Math.max(r, 0.001));
       s.facing = lerpAngle(s.facing, Math.atan2(to.x, to.z), Math.min(1, dt * 8));
+    } else if (posing) {
+      s.facing = lerpAngle(s.facing, Math.atan2(camera.position.x - s.pos.x, camera.position.z - s.pos.z), Math.min(1, dt * 7));
     } else if (busy && door) {
-      s.facing = lerpAngle(s.facing, Math.atan2(buildingSpot(activity!.buildingId).x - s.pos.x, buildingSpot(activity!.buildingId).z - s.pos.z), Math.min(1, dt * 6));
+      const b = buildingSpot(activity!.buildingId);
+      s.facing = lerpAngle(s.facing, Math.atan2(b.x - s.pos.x, b.z - s.pos.z), Math.min(1, dt * 6));
     } else if (busy) {
       // face the desk while working
       s.facing = lerpAngle(s.facing, Math.atan2(spot.desk.x - s.pos.x, spot.desk.z - s.pos.z), Math.min(1, dt * 6));
     }
-    pose.current = moving ? "walk" : busy && activity?.status === "working" ? "work" : now < s.pauseUntil && s.celebrate ? "wave" : "idle";
+    pose.current = moving
+      ? "walk"
+      : posing
+        ? now - s.selectedAt < 2.2 ? "wave" : "idle"
+        : busy && activity?.status === "working" ? "work" : now < s.pauseUntil && s.celebrate ? "wave" : "idle";
     if (group.current) {
       group.current.position.copy(s.pos);
       group.current.rotation.y = s.facing;

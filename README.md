@@ -25,6 +25,9 @@ Plazai is a small, friendly, open-source take on multi-agent AI. No complicated 
   | 🔐 Security Vault | Security reviews and hardening |
   | 🔭 Data Observatory | Data, SQL, metrics and charts |
 
+- **Meet your avatars:** click anyone in the Plaza and the camera flies round to face them. They turn and wave, and a card shows their name, role, personality, brain, finished tasks and recent work, with a box to give them a job.
+- **Real day and night:** the sky follows your computer's clock, with sunrise, sunset, stars and street lamps. Each avatar has a little house. Half an hour before bedtime they walk home, and at lights out the windows go dark.
+- **Bedtime and urgent jobs:** work you give at night is queued and done first thing in the morning. If it can't wait, mark it **⚡ Urgent** and they wake up and run to it. You can set bedtime and wake time (default 22:30 to 07:00), or turn bedtime off, in Settings.
 - **Calendar:** reminders and scheduled tasks that can repeat daily, on weekdays or weekly. They go off while Plazai is open, and anything missed runs as soon as you're back.
 - **Teams:** line avatars up (Researcher → Writer → Reviewer) and each one builds on the last one's work.
 - **Message Board:** finished work lands here, ready to read and copy.
@@ -65,6 +68,10 @@ Open **Settings** and choose a brain:
 
 You can paste keys in Settings (they're kept in your browser's storage) or put them in a `.env` file. See [`.env.example`](.env.example).
 
+### Preview night time
+
+Plazai uses your real clock. To see night without waiting, add `?time=HH:MM` to the address, e.g. `http://127.0.0.1:5173/?time=23:30`. The clock keeps ticking from there.
+
 ### Repo HQ and GitHub
 
 Avatars working in Repo HQ read your repository (README and file list) and write complete files. When a task finishes, **Upload to GitHub** lets you pick the files and push them, either as a **new branch with a pull request** on an existing repo or as a **brand-new repo**. Plazai never writes to your default branch, and nothing is uploaded until you click.
@@ -98,7 +105,7 @@ A team task runs one avatar at a time. Each avatar gets the task plus everything
 
 ## Contributing
 
-Ideas, bug reports and pull requests are very welcome. See [CONTRIBUTING.md](CONTRIBUTING.md). Some good first issues: more hair styles and outfits, new buildings and props, a day/night cycle, avatar emotes, and sharing avatars as codes.
+Ideas, bug reports and pull requests are very welcome. See [CONTRIBUTING.md](CONTRIBUTING.md). Some good first issues: more hair styles and outfits, new buildings and props, weather, avatar emotes, and sharing avatars as codes.
 
 ## A note on inspiration
 

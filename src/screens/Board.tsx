@@ -7,7 +7,7 @@ import { TaskCard } from "./TaskCard";
 
 /** Finished work arrives here as messages, newest first. */
 export function Board({ nav }: { nav: Nav }) {
-  const tasks = useStore((s) => s.tasks).filter((t) => t.status !== "running");
+  const tasks = useStore((s) => s.tasks).filter((t) => t.status !== "running" && t.status !== "queued");
   const agents = useStore((s) => s.agents);
   const { markRead } = useStore.getState();
   const [open, setOpen] = useState<string | null>(null);

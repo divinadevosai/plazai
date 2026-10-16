@@ -15,7 +15,7 @@ export function BuildingIcon({ def, size = 22 }: { def: BuildingDef; size?: numb
 }
 
 /** The close-up view of one building: what it is, what's inside, what you can do, and a way to start work here. */
-export function BuildingCard({ def, occupants, nav, onClose }: { def: BuildingDef; occupants: Agent[]; nav: Nav; onClose: () => void }) {
+export function BuildingCard({ def, occupants, nav, onClose, asleep = false }: { def: BuildingDef; occupants: Agent[]; nav: Nav; onClose: () => void; asleep?: boolean }) {
   const agents = useStore((s) => s.agents);
   const teams = useStore((s) => s.teams);
   const reminders = useStore((s) => s.reminders);
@@ -24,6 +24,7 @@ export function BuildingCard({ def, occupants, nav, onClose }: { def: BuildingDe
   const [prompt, setPrompt] = useState("");
   const [repo, setRepo] = useState(github.defaultRepo);
   const [sent, setSent] = useState(false);
+  const [urgent, setUrgent] = useState(false);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -34,7 +35,7 @@ export function BuildingCard({ def, occupants, nav, onClose }: { def: BuildingDe
   const start = () => {
     if (!prompt.trim() || !who) return;
     const [kind, id] = who.split(":") as ["agent" | "team", string];
-    assign("", prompt, { kind, id }, { buildingId: def.id, repo: def.id === "repo" ? repo : undefined });
+    assign("", prompt, { kind, id }, { buildingId: def.id, repo: def.id === "repo" ? repo : undefined, urgent: asleep && urgent });
     setPrompt("");
     setSent(true);
     setTimeout(() => setSent(false), 2500);
@@ -109,8 +110,13 @@ export function BuildingCard({ def, occupants, nav, onClose }: { def: BuildingDe
                 <button type="button" key={x} className="chip" onClick={() => setPrompt(x)}>{x}</button>
               ))}
             </div>
+            {asleep && (
+              <button type="button" className={`opt ${urgent ? "on" : ""}`} style={{ width: "100%", padding: "10px 14px", marginBottom: 8 }} aria-pressed={urgent} onClick={() => setUrgent(!urgent)}>
+                {urgent ? "⚡ Urgent: wake them up" : "😴 Everyone's asleep. Tap to make it urgent"}
+              </button>
+            )}
             <button className="btn primary" style={{ width: "100%" }} disabled={!prompt.trim() || !who}>
-              {sent ? "✓ On their way!" : `Send them to the ${def.name}`}
+              {sent ? (asleep && !urgent ? "✓ Queued for the morning" : "✓ On their way!") : asleep && !urgent ? "Queue for the morning" : `Send them to the ${def.name}`}
             </button>
           </form>
           {def.id === "repo" && (

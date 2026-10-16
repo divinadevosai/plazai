@@ -59,7 +59,9 @@ export interface Task {
   repo?: string;
   /** Reminders arrive on the Message Board as notes, not work. */
   kind?: "task" | "reminder";
-  status: "running" | "done" | "failed" | "stopped";
+  /** Urgent tasks wake sleeping avatars; others sent at night wait for the morning. */
+  urgent?: boolean;
+  status: "queued" | "running" | "done" | "failed" | "stopped";
   steps: Step[];
   createdAt: number;
   finishedAt?: number;
@@ -73,6 +75,8 @@ export interface Settings {
   sound: boolean;
   ownerName: string;
   github: { token: string; defaultRepo: string };
+  /** Bedtime for the avatars, in local "HH:MM". */
+  sleep: { enabled: boolean; bedtime: string; wake: string };
 }
 
 export interface Reminder {

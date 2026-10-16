@@ -42,7 +42,8 @@ export function Island({ desks, busy }: { desks: number; busy: boolean[] }) {
       const a = (i / 12) * Math.PI * 2 + 0.2;
       const d = 11.5 + r() * 2;
       const x = Math.cos(a) * d, z = Math.sin(a) * d;
-      if (z < -5 && Math.abs(x) < 7) continue;
+      if (z < -5 && Math.abs(x) < 7) continue; // desks
+      if (z > 6 && Math.abs(x) < 9) continue; // the homes street
       out.push({ x, z, s: 0.75 + r() * 0.35, hue: r() });
     }
     return out;
@@ -54,7 +55,7 @@ export function Island({ desks, busy }: { desks: number; busy: boolean[] }) {
       const a = r() * Math.PI * 2;
       const d = 5.5 + r() * 8.5;
       return { x: Math.cos(a) * d, z: Math.sin(a) * d, c: colors[Math.floor(r() * colors.length)]! };
-    }).filter((f) => !(f.z < -5 && Math.abs(f.x) < 6.5));
+    }).filter((f) => !(f.z < -5 && Math.abs(f.x) < 6.5) && !(f.z > 8.5 && f.z < 14 && Math.abs(f.x) < 8.5));
   }, []);
 
   return (
@@ -103,7 +104,6 @@ export function Island({ desks, busy }: { desks: number; busy: boolean[] }) {
       ))}
       <Bench position={[6, 0, 3.5]} rotation={-2.1} />
       <Bench position={[-6, 0, 3.5]} rotation={2.1} />
-      <Bench position={[0, 0, 9.5]} rotation={Math.PI} />
       {Array.from({ length: desks }, (_, i) => <Desk key={i} index={i} count={desks} busy={busy[i] ?? false} />)}
       <Clouds />
     </group>

@@ -50,6 +50,7 @@ const DEFAULT_SETTINGS: Settings = {
   sound: true,
   ownerName: "",
   github: { token: "", defaultRepo: "" },
+  sleep: { enabled: true, bedtime: "22:30", wake: "07:00" },
 };
 
 interface State {
@@ -123,7 +124,7 @@ export const useStore = create<State>()(
     }),
     {
       name: "plazai",
-      version: 2,
+      version: 3,
       // v1 → v2: buildings, reminders, schedules and GitHub settings.
       migrate: (old, version) => {
         const s = old as Partial<State>;
@@ -133,6 +134,8 @@ export const useStore = create<State>()(
           s.schedules ??= [];
           s.settings = { ...DEFAULT_SETTINGS, ...s.settings, github: s.settings?.github ?? DEFAULT_SETTINGS.github };
         }
+        // v2 → v3: bedtimes.
+        if (version < 3) s.settings = { ...DEFAULT_SETTINGS, ...s.settings, sleep: s.settings?.sleep ?? DEFAULT_SETTINGS.sleep };
         return s as State;
       },
       // A reload can't resume a half-finished run, so mark interrupted ones as stopped.
@@ -150,13 +153,14 @@ export interface Activity {
   status: Step["status"];
   text: string;
   buildingId: string;
+  urgent?: boolean;
 }
 
 export function activityOf(tasks: Task[], agentId: string): Activity | null {
   for (const t of tasks) {
     if (t.status !== "running") continue;
     const step = t.steps.find((s) => s.agentId === agentId && (s.status === "working" || s.status === "walking"));
-    if (step) return { status: step.status, text: step.output, buildingId: t.buildingId ?? "plaza" };
+    if (step) return { status: step.status, text: step.output, buildingId: t.buildingId ?? "plaza", urgent: t.urgent };
   }
   return null;
 }

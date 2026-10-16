@@ -2,6 +2,7 @@ import { useFrame } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { BUILDINGS, buildingSpot, type BuildingDef } from "./buildings";
+import { sky } from "./sky";
 
 const INK = "#3b4252";
 
@@ -76,7 +77,7 @@ function Building({ def, busy, celebrate, selected, onSelect }: { def: BuildingD
   const windowMat = useMemo(() => new THREE.MeshStandardMaterial({ color: "#cfeaf7", emissive: "#ffd77a", emissiveIntensity: 0.12, roughness: 0.2 }), []);
   useEffect(() => () => windowMat.dispose(), [windowMat]);
   useFrame(({ clock }) => {
-    windowMat.emissiveIntensity = busy ? 0.9 + Math.sin(clock.elapsedTime * 4) * 0.25 : 0.12;
+    windowMat.emissiveIntensity = busy ? 0.9 + Math.sin(clock.elapsedTime * 4) * 0.25 : 0.12 + sky.night * 0.3;
   });
   const wall = <meshStandardMaterial color={def.color} roughness={0.75} />;
   const roof = <meshStandardMaterial color={def.roof} roughness={0.6} />;

@@ -3,6 +3,7 @@ import { nextOccurrence, uid, useStore } from "../store";
 import type { Agent, Provider, Task } from "../types";
 import { buildingById, PLAZA_ID, routeTask } from "../world/buildings";
 import { toast } from "../toast";
+import { clockNow, sleepPhase } from "../clock";
 
 const controllers = new Map<string, AbortController>();
 const WALK_MS = 2600;
@@ -19,7 +20,12 @@ export interface AssignOptions {
   /** A building id, "plaza", or "auto" (default) to pick from the task's wording. */
   buildingId?: string;
   repo?: string;
+  /** Wake sleeping avatars for this one. */
+  urgent?: boolean;
 }
+
+/** True while the avatars are tucked up in bed. */
+export const everyoneAsleep = () => sleepPhase(useStore.getState().settings.sleep, clockNow()) === "asleep";
 
 /** Creates a task for one agent or a whole team and starts it. */
 export function assign(title: string, prompt: string, assignee: Task["assignee"], opts: AssignOptions = {}) {
@@ -34,13 +40,28 @@ export function assign(title: string, prompt: string, assignee: Task["assignee"]
     assignee,
     buildingId: !opts.buildingId || opts.buildingId === "auto" ? routeTask(`${title} ${prompt}`) : opts.buildingId,
     repo: opts.repo?.trim() || undefined,
-    status: "running",
+    urgent: opts.urgent || undefined,
+    // At night, ordinary work waits for the morning; urgent work wakes them up.
+    status: everyoneAsleep() && !opts.urgent ? "queued" : "running",
     steps: members.map((agentId) => ({ agentId, status: "waiting", output: "" })),
     createdAt: Date.now(),
   };
   addTask(task);
-  void runTask(task.id);
+  if (task.status === "queued") {
+    chime("step");
+    toast("😴 Queued for the morning", "Everyone's asleep. Mark it urgent to wake them up.");
+  } else void runTask(task.id);
   return task.id;
+}
+
+/** Urgent! Wakes the avatars for a queued task and starts it now. */
+export function wakeFor(taskId: string) {
+  const s = useStore.getState();
+  const t = s.tasks.find((x) => x.id === taskId);
+  if (!t || t.status !== "queued") return;
+  s.updateTask(taskId, { status: "running", urgent: true });
+  toast("⚡ Wakey wakey!", "They're up and rushing to it.");
+  void runTask(taskId);
 }
 
 export function stopTask(id: string) {
@@ -185,9 +206,17 @@ async function repoContext(repo: string, signal: AbortSignal): Promise<string> {
   }
 }
 
-/** Fires due reminders and scheduled tasks. Called every few seconds while Plazai is open. */
+/** Fires due reminders and scheduled tasks, and starts the morning queue. Called every few seconds. */
 export function tickScheduler(now = Date.now()) {
   const s = useStore.getState();
+  if (!everyoneAsleep()) {
+    const waiting = s.tasks.filter((t) => t.status === "queued").sort((a, b) => a.createdAt - b.createdAt);
+    for (const t of waiting) {
+      s.updateTask(t.id, { status: "running" });
+      void runTask(t.id);
+    }
+    if (waiting.length) toast("☀️ Good morning!", `Starting ${waiting.length} task${waiting.length > 1 ? "s" : ""} from last night.`);
+  }
   for (const r of s.reminders) {
     if (r.done || r.at > now) continue;
     s.addTask({ id: uid("note"), kind: "reminder", title: `⏰ ${r.text}`, prompt: r.text, assignee: { kind: "agent", id: "" }, buildingId: "calendar", status: "done", steps: [], createdAt: now, finishedAt: now });

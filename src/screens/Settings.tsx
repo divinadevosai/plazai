@@ -110,6 +110,29 @@ export function SettingsScreen({ nav }: { nav: Nav }) {
         </section>
 
         <section className="panel" style={{ padding: 22 }}>
+          <h2 style={{ marginTop: 0 }}>Bedtime</h2>
+          <p className="hint" style={{ marginTop: -6 }}>
+            The plaza follows your real clock. In the evening your avatars head home, and at bedtime the lights go out. Tasks sent while they sleep wait for the morning, unless you mark them ⚡ urgent to wake them up.
+          </p>
+          <button className={`opt ${settings.sleep.enabled ? "on" : ""}`} style={{ padding: "10px 16px", marginBottom: 14 }} aria-pressed={settings.sleep.enabled} onClick={() => setSettings({ sleep: { ...settings.sleep, enabled: !settings.sleep.enabled } })}>
+            {settings.sleep.enabled ? "🌙 Bedtime on" : "☀️ Bedtime off (they never sleep)"}
+          </button>
+          {settings.sleep.enabled && (
+            <div className="row" style={{ alignItems: "stretch" }}>
+              <label className="field" style={{ flex: 1 }}>
+                <span>Lights out</span>
+                <input className="input" type="time" value={settings.sleep.bedtime} onChange={(e) => e.target.value && setSettings({ sleep: { ...settings.sleep, bedtime: e.target.value } })} />
+              </label>
+              <label className="field" style={{ flex: 1 }}>
+                <span>Wake up</span>
+                <input className="input" type="time" value={settings.sleep.wake} onChange={(e) => e.target.value && setSettings({ sleep: { ...settings.sleep, wake: e.target.value } })} />
+              </label>
+            </div>
+          )}
+          <p className="hint" style={{ margin: 0 }}>Tip: add <code>?time=23:30</code> to the address to preview the plaza at night.</p>
+        </section>
+
+        <section className="panel" style={{ padding: 22 }}>
           <h2 style={{ marginTop: 0 }}>You</h2>
           <label className="field">
             <span>Your name (optional)</span>
