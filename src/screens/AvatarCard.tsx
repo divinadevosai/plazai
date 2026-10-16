@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Nav } from "../App";
 import { Portrait } from "../avatar/Portrait";
+import type { OffDuty } from "../clock";
 import { assign } from "../engine/run";
 import { useStore } from "../store";
 import type { Agent } from "../types";
@@ -9,7 +10,7 @@ import { BUILDINGS, buildingById } from "../world/buildings";
 const BRAINS: Record<string, string> = { google: "Google Gemini", anthropic: "Anthropic Claude", openai: "OpenAI", ollama: "Ollama (local)", demo: "Demo mode" };
 
 /** The close-up of one avatar: who they are, how they work, what they're up to, and a way to give them a job. */
-export function AvatarCard({ agent, status, asleep, nav, onClose }: { agent: Agent; status: string; asleep: boolean; nav: Nav; onClose: () => void }) {
+export function AvatarCard({ agent, status, off, nav, onClose }: { agent: Agent; status: string; off: OffDuty; nav: Nav; onClose: () => void }) {
   const tasks = useStore((s) => s.tasks);
   const teams = useStore((s) => s.teams);
   const settings = useStore((s) => s.settings);
@@ -32,9 +33,9 @@ export function AvatarCard({ agent, status, asleep, nav, onClose }: { agent: Age
 
   const send = () => {
     if (!prompt.trim()) return;
-    assign("", prompt, { kind: "agent", id: agent.id }, { buildingId: where, urgent: asleep && urgent });
+    assign("", prompt, { kind: "agent", id: agent.id }, { buildingId: where, urgent: !!off && urgent });
     setPrompt("");
-    setSent(asleep && !urgent ? "Queued for the morning" : "On it!");
+    setSent(off && !urgent ? (off === "lunch" ? "Queued for after lunch" : "Queued for the morning") : "On it!");
     setTimeout(() => setSent(""), 2500);
   };
 
@@ -108,13 +109,15 @@ export function AvatarCard({ agent, status, asleep, nav, onClose }: { agent: Age
               <option value="plaza">Plaza desks</option>
               {BUILDINGS.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
-            {asleep && (
+            {off && (
               <button type="button" className={`opt ${urgent ? "on" : ""}`} style={{ width: "100%", padding: "10px 14px", marginBottom: 8 }} aria-pressed={urgent} onClick={() => setUrgent(!urgent)}>
-                {urgent ? `⚡ Urgent: wake ${agent.name} up` : `😴 ${agent.name} is asleep. Tap to make it urgent`}
+                {off === "lunch"
+                  ? urgent ? `⚡ Urgent: call ${agent.name} back from lunch` : `🥪 ${agent.name} is on lunch. Tap to make it urgent`
+                  : urgent ? `⚡ Urgent: wake ${agent.name} up` : `😴 ${agent.name} is asleep. Tap to make it urgent`}
               </button>
             )}
             <button className="btn primary" style={{ width: "100%" }} disabled={!prompt.trim()}>
-              {sent ? `✓ ${sent}` : asleep && !urgent ? "Queue for the morning" : asleep ? "Wake them up!" : `Send ${agent.name}`}
+              {sent ? `✓ ${sent}` : off && !urgent ? (off === "lunch" ? "Queue for after lunch" : "Queue for the morning") : off === "lunch" ? "Call them back!" : off ? "Wake them up!" : `Send ${agent.name}`}
             </button>
           </form>
           <button className="btn small" style={{ marginTop: 12 }} onClick={() => nav.go("maker", { agentId: agent.id })}>Edit in Avatar Maker</button>

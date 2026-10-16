@@ -11,8 +11,9 @@ import { BUILDINGS, buildingById, buildingSpot } from "../world/buildings";
 import { Buildings } from "../world/Buildings";
 import { Island } from "../world/Island";
 import { PlazaAgent, tail } from "../world/PlazaAgent";
-import { clockNow, sleepPhase } from "../clock";
+import { clockNow, dayPhase, offDutyOf } from "../clock";
 import { Homes, homeSpot, type HomeState } from "../world/Homes";
+import { GRILL, GRILL_LABEL_H, Lunch, lunchSeat } from "../world/Lunch";
 import { Sky } from "../world/Sky";
 import { AvatarCard } from "./AvatarCard";
 import { BuildingCard, BuildingIcon } from "./BuildingCard";
@@ -34,11 +35,12 @@ export function Plaza({ nav }: { nav: Nav }) {
   const [homes, setHomes] = useState<Record<string, HomeState>>({});
   const [urgent, setUrgent] = useState(false);
   const sleep = useStore((s) => s.settings.sleep);
+  const lunch = useStore((s) => s.settings.lunch);
   const positions = useMemo(() => new Map<string, THREE.Vector3>(), []);
   const labels = useRef(new Map<string, HTMLDivElement>());
   const now = useTick(1000);
-  const phase = sleepPhase(sleep, clockNow());
-  const asleep = phase === "asleep";
+  const phase = dayPhase({ sleep, lunch }, clockNow());
+  const off = offDutyOf(phase);
 
   const activity = agents.map((a) => activityOf(tasks, a.id));
   const justDone = agents.map((a) => tasks.some((t) => t.steps.some((s) => s.agentId === a.id && s.status === "done" && s.endedAt && now - s.endedAt < 6000)));
@@ -46,6 +48,11 @@ export function Plaza({ nav }: { nav: Nav }) {
   const occupants = (bid: string) => agents.filter((a) => inside[a.id] === bid);
   const busy = Object.fromEntries(BUILDINGS.map((b) => [b.id, occupants(b.id).length]));
   const celebrate = { launch: tasks.some((t) => t.buildingId === "launch" && t.status === "done" && t.finishedAt && now - t.finishedAt < 4000) };
+
+  const atTable = (i: number) => {
+    const p = positions.get(agents[i]!.id);
+    return !!p && p.distanceTo(lunchSeat(i, agents.length).stand) < 0.6;
+  };
 
   const onHome = useCallback((id: string, st: HomeState | null) => {
     setHomes((m) => {
@@ -68,7 +75,7 @@ export function Plaza({ nav }: { nav: Nav }) {
   const go = () => {
     if (!prompt.trim() || !who) return;
     const [kind, id] = who.split(":") as ["agent" | "team", string];
-    assign("", prompt, { kind, id }, { buildingId: where, repo: where === "repo" || where === "auto" ? repo : undefined, urgent: asleep && urgent });
+    assign("", prompt, { kind, id }, { buildingId: where, repo: where === "repo" || where === "auto" ? repo : undefined, urgent: !!off && urgent });
     setPrompt("");
     setUrgent(false);
   };
@@ -87,6 +94,7 @@ export function Plaza({ nav }: { nav: Nav }) {
     if (homes[a.id] === "asleep") return "😴 Asleep at home";
     if (homes[a.id] === "homeAwake") return "🏠 At home, winding down";
     if (phase === "goingHome") return "Heading home for the night";
+    if (phase === "lunch") return "🥪 On lunch at the Picnic Grill";
     return "Free to help";
   };
 
@@ -97,6 +105,7 @@ export function Plaza({ nav }: { nav: Nav }) {
         <Island desks={agents.length} busy={activity.map((a) => a?.status === "working" && a.buildingId === "plaza")} />
         <Buildings busy={busy} celebrate={celebrate} selected={building?.id ?? null} onSelect={selectBuilding} />
         <Homes agents={agents} states={homes} />
+        <Lunch count={agents.length} />
         {agents.map((a, i) => (
           <PlazaAgent
             key={a.id}
@@ -126,6 +135,7 @@ export function Plaza({ nav }: { nav: Nav }) {
           const thought = heading
             ? act.urgent ? "⚡ Urgent! On my way!" : `On my way to the ${buildingById(act.buildingId)?.name ?? "desks"}!`
             : !act && phase === "goingHome" ? "Heading home 🌙"
+            : !act && phase === "lunch" && !atTable(i) ? "Off to lunch 🥪"
             : act?.status === "working" ? tail(act.text) || "Thinking…" : null;
           return (
             <div key={a.id} className="label3d" ref={(el) => void (el ? labels.current.set(a.id, el) : labels.current.delete(a.id))} style={inside[a.id] || homes[a.id] ? { display: "none" } : undefined}>
@@ -156,6 +166,10 @@ export function Plaza({ nav }: { nav: Nav }) {
             </div>
           );
         })}
+        <div className="label3d" ref={(el) => void (el ? labels.current.set("grill", el) : labels.current.delete("grill"))}>
+          {phase === "lunch" && <div className="thought">Lunch is served! 🍔</div>}
+          <div className="bname" style={{ borderBottom: "3px solid #ff6b6b", cursor: "default" }}>🥪 Picnic Grill</div>
+        </div>
         {agents.map((a, i) => {
           const st = homes[a.id];
           return (
@@ -172,7 +186,7 @@ export function Plaza({ nav }: { nav: Nav }) {
       <div className="overlay-top">
         <MenuButton nav={nav} />
         <span className="chip" style={{ background: "#fff", fontSize: 15, padding: "8px 16px" }}>
-          {running ? `${running} task${running > 1 ? "s" : ""} in progress` : asleep ? "🌙 Night time · everyone's asleep" : phase === "goingHome" ? "🌆 Heading home for the night" : "Everyone's free"}
+          {running ? `${running} task${running > 1 ? "s" : ""} in progress` : phase === "asleep" ? "🌙 Night time · everyone's asleep" : phase === "goingHome" ? "🌆 Heading home for the night" : phase === "lunch" ? `🥪 Lunch break until ${lunch.end}` : "Everyone's free"}
         </span>
         <div style={{ flex: 1 }} />
         <button className="btn" onClick={() => nav.go("calendar")}>Calendar</button>
@@ -180,9 +194,9 @@ export function Plaza({ nav }: { nav: Nav }) {
       </div>
 
       {focusedAgent ? (
-        <AvatarCard key={focusedAgent.id} agent={focusedAgent} status={statusOf(focusedAgent, agents.indexOf(focusedAgent))} asleep={asleep} nav={nav} onClose={closeBuilding} />
+        <AvatarCard key={focusedAgent.id} agent={focusedAgent} status={statusOf(focusedAgent, agents.indexOf(focusedAgent))} off={off} nav={nav} onClose={closeBuilding} />
       ) : building ? (
-        <BuildingCard key={building.id} def={building} occupants={occupants(building.id)} nav={nav} onClose={closeBuilding} asleep={asleep} />
+        <BuildingCard key={building.id} def={building} occupants={occupants(building.id)} nav={nav} onClose={closeBuilding} off={off} />
       ) : (
         <div className="panel plaza-side">
           {agents.map((a, i) => {
@@ -230,12 +244,12 @@ export function Plaza({ nav }: { nav: Nav }) {
           {BUILDINGS.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
         </select>
         <input className="input" placeholder="Give them a task…" value={prompt} onChange={(e) => setPrompt(e.target.value)} aria-label="Task" />
-        {asleep && (
-          <button type="button" className={`btn ${urgent ? "primary" : ""}`} onClick={() => setUrgent(!urgent)} aria-pressed={urgent} title="Wake them up for this one">
-            {urgent ? "⚡ Urgent" : "😴 Morning"}
+        {off && (
+          <button type="button" className={`btn ${urgent ? "primary" : ""}`} style={{ whiteSpace: "nowrap" }} onClick={() => setUrgent(!urgent)} aria-pressed={urgent} title={off === "lunch" ? "Call them back from lunch for this one" : "Wake them up for this one"}>
+            {urgent ? "⚡ Urgent" : off === "lunch" ? "🥪 After lunch" : "😴 Morning"}
           </button>
         )}
-        <button className="btn primary" disabled={!prompt.trim() || !who}>{asleep && !urgent ? "Queue" : "Go!"}</button>
+        <button className="btn primary" disabled={!prompt.trim() || !who}>{off && !urgent ? "Queue" : "Go!"}</button>
       </form>
       )}
     </div>
@@ -268,6 +282,7 @@ function LabelProjector({ agents, positions, labels }: { agents: { id: string; h
       if (p) place(a.id, p.x, a.h, p.z);
     }
     for (const r of roofs) place(r.id, r.p.x, r.h, r.p.z);
+    place("grill", GRILL.x, GRILL_LABEL_H, GRILL.z);
     agents.forEach((a, i) => {
       const h = homeSpot(i, agents.length);
       place(`h:${a.id}`, h.x, 3.4, h.z);

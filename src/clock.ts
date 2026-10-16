@@ -44,6 +44,19 @@ export function sleepPhase(sleep: Settings["sleep"], ms = clockNow()): SleepPhas
   return "awake";
 }
 
+export type DayPhase = SleepPhase | "lunch";
+
+/** The whole daily routine: bedtime first, then the lunch break (only while they're awake). */
+export function dayPhase(settings: Pick<Settings, "sleep" | "lunch">, ms = clockNow()): DayPhase {
+  const p = sleepPhase(settings.sleep, ms);
+  if (p !== "awake" || !settings.lunch.enabled) return p;
+  return within(minuteOfDay(ms), parseHM(settings.lunch.start), parseHM(settings.lunch.end)) ? "lunch" : "awake";
+}
+
+/** Off duty: asleep, or out for lunch. New work waits unless it's urgent. */
+export type OffDuty = "asleep" | "lunch" | null;
+export const offDutyOf = (p: DayPhase): OffDuty => (p === "asleep" || p === "lunch" ? p : null);
+
 /** 1 in full daylight, 0 at night, easing through dawn (6–8) and dusk (18–20:30). */
 export function daylight(ms = clockNow()) {
   const h = minuteOfDay(ms) / 60;

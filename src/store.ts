@@ -51,6 +51,7 @@ const DEFAULT_SETTINGS: Settings = {
   ownerName: "",
   github: { token: "", defaultRepo: "" },
   sleep: { enabled: true, bedtime: "22:30", wake: "07:00" },
+  lunch: { enabled: true, start: "12:00", end: "12:30" },
 };
 
 interface State {
@@ -124,7 +125,7 @@ export const useStore = create<State>()(
     }),
     {
       name: "plazai",
-      version: 3,
+      version: 4,
       // v1 → v2: buildings, reminders, schedules and GitHub settings.
       migrate: (old, version) => {
         const s = old as Partial<State>;
@@ -136,6 +137,8 @@ export const useStore = create<State>()(
         }
         // v2 → v3: bedtimes.
         if (version < 3) s.settings = { ...DEFAULT_SETTINGS, ...s.settings, sleep: s.settings?.sleep ?? DEFAULT_SETTINGS.sleep };
+        // v3 → v4: lunch breaks.
+        if (version < 4) s.settings = { ...DEFAULT_SETTINGS, ...s.settings, lunch: s.settings?.lunch ?? DEFAULT_SETTINGS.lunch };
         return s as State;
       },
       // A reload can't resume a half-finished run, so mark interrupted ones as stopped.

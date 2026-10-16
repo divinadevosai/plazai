@@ -2,12 +2,13 @@ import { useFrame } from "@react-three/fiber";
 import { useRef } from "react";
 import * as THREE from "three";
 import { Avatar3D, type Pose } from "../avatar/Avatar3D";
-import type { SleepPhase } from "../clock";
+import type { DayPhase } from "../clock";
 import type { Activity } from "../store";
 import type { Agent } from "../types";
 import { buildingSpot, PLAZA_ID } from "./buildings";
 import { homeSpot, type HomeState } from "./Homes";
 import { deskSpot } from "./Island";
+import { lunchSeat } from "./Lunch";
 
 const SPEED = 1.7;
 const WANDER_MIN = 3.4;
@@ -19,8 +20,8 @@ interface Props {
   index: number;
   count: number;
   activity: Activity | null;
-  /** Bedtime routine: awake, heading home, or asleep. */
-  phase: SleepPhase;
+  /** Daily routine: awake, at lunch, heading home, or asleep. */
+  phase: DayPhase;
   /** Called when the avatar steps inside a building (or comes back out). */
   onInside: (id: string, buildingId: string | null) => void;
   /** Called when the avatar goes into (or leaves) their own house. */
@@ -41,7 +42,8 @@ const v3 = (p: { x: number; z: number }) => new THREE.Vector3(p.x, 0, p.z);
 
 /**
  * One avatar living in the plaza. By day they wander, and walk to a desk or building when given work.
- * In the evening they head home; at bedtime the lights go out. Urgent work gets them up and running.
+ * At lunchtime they gather at the Picnic Grill. In the evening they head home; at bedtime the lights go out.
+ * Urgent work gets them up (or back from lunch) and running.
  */
 export function PlazaAgent({ agent, index, count, activity, phase, selected, onSelect, positions, onInside, onHome }: Props) {
   const group = useRef<THREE.Group>(null);
@@ -70,7 +72,9 @@ export function PlazaAgent({ agent, index, count, activity, phase, selected, onS
     const spot = deskSpot(index, count);
     const inBuilding = busy && activity!.buildingId !== PLAZA_ID;
     const door = inBuilding ? buildingSpot(activity!.buildingId).door : null;
-    const bedtime = phase !== "awake";
+    const bedtime = phase === "goingHome" || phase === "asleep";
+    const lunch = phase === "lunch";
+    const seat = lunchSeat(index, count);
 
     if (startHome && !s.homeReported) {
       s.homeReported = true;
@@ -101,7 +105,7 @@ export function PlazaAgent({ agent, index, count, activity, phase, selected, onS
       s.wasBusy = false;
       s.celebrate = true;
       s.pauseUntil = now + 2.5;
-      s.target = bedtime ? v3(home.door) : wanderPoint();
+      s.target = bedtime ? v3(home.door) : lunch ? seat.stand.clone() : wanderPoint();
     } else if (bedtime) {
       s.target = v3(home.door);
       const arrived = s.pos.distanceTo(s.target) < 0.3;
@@ -110,6 +114,9 @@ export function PlazaAgent({ agent, index, count, activity, phase, selected, onS
         s.atHome = want;
         onHome(agent.id, want);
       }
+    } else if (lunch) {
+      leaveHome();
+      s.target = seat.stand.clone();
     } else {
       leaveHome(); // good morning!
       if (s.pos.distanceTo(s.target) < 0.15 && now > s.pauseUntil) {
@@ -132,10 +139,10 @@ export function PlazaAgent({ agent, index, count, activity, phase, selected, onS
 
     // Selected (and free): stop, turn to the camera, and wave hello.
     const posing = selected && !busy && !s.atHome;
-    const moving = !posing && dist > 0.08 && (busy || bedtime || now > s.pauseUntil);
+    const moving = !posing && dist > 0.08 && (busy || bedtime || lunch || now > s.pauseUntil);
     if (moving) {
       to.normalize();
-      const speed = busy ? SPEED * (activity!.urgent ? 4.5 : 3) : bedtime ? SPEED * 1.4 : SPEED;
+      const speed = busy ? SPEED * (activity!.urgent ? 4.5 : 3) : bedtime ? SPEED * 1.4 : lunch ? SPEED * 1.6 : SPEED;
       s.pos.addScaledVector(to, Math.min(dist, speed * dt));
       // slide around the fountain instead of walking through it
       const r = Math.hypot(s.pos.x, s.pos.z);
@@ -146,6 +153,9 @@ export function PlazaAgent({ agent, index, count, activity, phase, selected, onS
     } else if (busy && door) {
       const b = buildingSpot(activity!.buildingId);
       s.facing = lerpAngle(s.facing, Math.atan2(b.x - s.pos.x, b.z - s.pos.z), Math.min(1, dt * 6));
+    } else if (lunch && !busy) {
+      // tuck in: face the table
+      s.facing = lerpAngle(s.facing, Math.atan2(seat.table.x - s.pos.x, seat.table.z - s.pos.z), Math.min(1, dt * 6));
     } else if (busy) {
       // face the desk while working
       s.facing = lerpAngle(s.facing, Math.atan2(spot.desk.x - s.pos.x, spot.desk.z - s.pos.z), Math.min(1, dt * 6));
@@ -154,7 +164,7 @@ export function PlazaAgent({ agent, index, count, activity, phase, selected, onS
       ? "walk"
       : posing
         ? now - s.selectedAt < 2.2 ? "wave" : "idle"
-        : busy && activity?.status === "working" ? "work" : now < s.pauseUntil && s.celebrate ? "wave" : "idle";
+        : (busy && activity?.status === "working") || (lunch && !busy) ? "work" : now < s.pauseUntil && s.celebrate ? "wave" : "idle";
     if (group.current) {
       group.current.position.copy(s.pos);
       group.current.rotation.y = s.facing;

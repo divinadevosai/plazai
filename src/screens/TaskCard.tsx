@@ -22,7 +22,7 @@ export function TaskCard({ task, open = true }: { task: Task; open?: boolean }) 
   const [copied, setCopied] = useState(false);
   const [uploading, setUploading] = useState(false);
   const building = buildingById(task.buildingId);
-  const [label, color] = STATUS[task.status];
+  const [label, color] = task.status === "queued" && task.waitFor === "lunch" ? ["Waiting for after lunch", "#e08a3c"] : STATUS[task.status];
   const final = [...task.steps].reverse().find((s) => s.status === "done")?.output ?? "";
   const files = task.status === "done" ? parseFiles(task.steps.filter((s) => s.status === "done").map((s) => s.output).join("\n\n")) : [];
 
@@ -73,7 +73,7 @@ export function TaskCard({ task, open = true }: { task: Task; open?: boolean }) 
                       {s.demo && <span className="chip" style={{ fontSize: 11 }}>demo</span>}
                     </div>
                     <div className={`bubble ${live ? "live" : ""}`}>
-                      {s.output || (task.status === "queued" ? "Zzz… I'll do this first thing in the morning." : s.status === "waiting" ? "Waiting for my turn…" : s.status === "walking" ? "On my way to my desk…" : s.status === "working" ? "Thinking…" : "—")}
+                      {s.output || (task.status === "queued" ? (task.waitFor === "lunch" ? "Mmm, lunch… I'll do this as soon as I'm back." : "Zzz… I'll do this first thing in the morning.") : s.status === "waiting" ? "Waiting for my turn…" : s.status === "walking" ? "On my way to my desk…" : s.status === "working" ? "Thinking…" : "—")}
                     </div>
                   </div>
                 </div>
@@ -83,7 +83,7 @@ export function TaskCard({ task, open = true }: { task: Task; open?: boolean }) 
           <div className="row" style={{ marginTop: 14, justifyContent: "flex-end" }}>
             {task.status === "queued" ? (
               <>
-                <button className="btn small primary" onClick={() => wakeFor(task.id)}>⚡ Urgent: wake them now</button>
+                <button className="btn small primary" onClick={() => wakeFor(task.id)}>{task.waitFor === "lunch" ? "⚡ Urgent: call them back now" : "⚡ Urgent: wake them now"}</button>
                 <button className="btn small danger" onClick={() => removeTask(task.id)}>Cancel</button>
               </>
             ) : task.status === "running" ? (

@@ -27,7 +27,8 @@ Plazai is a small, friendly, open-source take on multi-agent AI. No complicated 
 
 - **Meet your avatars:** click anyone in the Plaza and the camera flies round to face them. They turn and wave, and a card shows their name, role, personality, brain, finished tasks and recent work, with a box to give them a job.
 - **Real day and night:** the sky follows your computer's clock, with sunrise, sunset, stars and street lamps. Each avatar has a little house. Half an hour before bedtime they walk home, and at lights out the windows go dark.
-- **Bedtime and urgent jobs:** work you give at night is queued and done first thing in the morning. If it can't wait, mark it **⚡ Urgent** and they wake up and run to it. You can set bedtime and wake time (default 22:30 to 07:00), or turn bedtime off, in Settings.
+- **Lunch break:** from 12:00 to 12:30 everyone heads to the **Picnic Grill** and eats together. New work waits until they're back, or mark it **⚡ Urgent** to call someone back from lunch straight away.
+- **Bedtime and urgent jobs:** work you give at night is queued and done first thing in the morning. If it can't wait, mark it **⚡ Urgent** and they wake up and run to it. Under **Settings → Daily routine** you can change the lunch and bedtime hours (default 22:30 to 07:00), switch lunch or bedtime off separately, or turn the whole routine off with one tap so they work around the clock. Both are on by default.
 - **Calendar:** reminders and scheduled tasks that can repeat daily, on weekdays or weekly. They go off while Plazai is open, and anything missed runs as soon as you're back.
 - **Teams:** line avatars up (Researcher → Writer → Reviewer) and each one builds on the last one's work.
 - **Message Board:** finished work lands here, ready to read and copy.
@@ -68,9 +69,9 @@ Open **Settings** and choose a brain:
 
 You can paste keys in Settings (they're kept in your browser's storage) or put them in a `.env` file. See [`.env.example`](.env.example).
 
-### Preview night time
+### Preview lunch and night time
 
-Plazai uses your real clock. To see night without waiting, add `?time=HH:MM` to the address, e.g. `http://127.0.0.1:5173/?time=23:30`. The clock keeps ticking from there.
+Plazai uses your real clock. To see lunch or night without waiting, add `?time=HH:MM` to the address, e.g. `http://127.0.0.1:5173/?time=12:10` or `?time=23:30`. The clock keeps ticking from there.
 
 ### Repo HQ and GitHub
 

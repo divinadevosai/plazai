@@ -19,6 +19,7 @@ const PROVIDERS: { id: Settings["provider"]; name: string; blurb: string; keyUrl
 
 export function SettingsScreen({ nav }: { nav: Nav }) {
   const settings = useStore((s) => s.settings);
+  const routineOn = settings.sleep.enabled || settings.lunch.enabled;
   const { setSettings, resetAll } = useStore.getState();
   const [status, setStatus] = useState<Status | null>(null);
 
@@ -110,11 +111,38 @@ export function SettingsScreen({ nav }: { nav: Nav }) {
         </section>
 
         <section className="panel" style={{ padding: 22 }}>
-          <h2 style={{ marginTop: 0 }}>Bedtime</h2>
+          <h2 style={{ marginTop: 0 }}>Daily routine</h2>
           <p className="hint" style={{ marginTop: -6 }}>
-            The plaza follows your real clock. In the evening your avatars head home, and at bedtime the lights go out. Tasks sent while they sleep wait for the morning, unless you mark them ⚡ urgent to wake them up.
+            The plaza follows your real clock. Your avatars take a lunch break at the Picnic Grill, head home in the evening, and go to bed at night. Tasks sent while they're off wait until they're back, unless you mark them ⚡ urgent to call them back or wake them up.
           </p>
-          <button className={`opt ${settings.sleep.enabled ? "on" : ""}`} style={{ padding: "10px 16px", marginBottom: 14 }} aria-pressed={settings.sleep.enabled} onClick={() => setSettings({ sleep: { ...settings.sleep, enabled: !settings.sleep.enabled } })}>
+          <button
+            className={`opt ${routineOn ? "on" : ""}`}
+            style={{ padding: "10px 16px", marginBottom: 18 }}
+            aria-pressed={routineOn}
+            onClick={() => setSettings({ sleep: { ...settings.sleep, enabled: !routineOn }, lunch: { ...settings.lunch, enabled: !routineOn } })}
+          >
+            {routineOn ? "⏰ Routine on · tap to switch off lunch and bedtime" : "🏃 Routine off · they work around the clock (tap to switch back on)"}
+          </button>
+
+          <h3 style={{ margin: "0 0 8px" }}>Lunch break</h3>
+          <button className={`opt ${settings.lunch.enabled ? "on" : ""}`} style={{ padding: "10px 16px", marginBottom: 12 }} aria-pressed={settings.lunch.enabled} onClick={() => setSettings({ lunch: { ...settings.lunch, enabled: !settings.lunch.enabled } })}>
+            {settings.lunch.enabled ? "🥪 Lunch on" : "⏩ Lunch off (they skip lunch)"}
+          </button>
+          {settings.lunch.enabled && (
+            <div className="row" style={{ alignItems: "stretch" }}>
+              <label className="field" style={{ flex: 1 }}>
+                <span>Lunch starts</span>
+                <input className="input" type="time" value={settings.lunch.start} onChange={(e) => e.target.value && setSettings({ lunch: { ...settings.lunch, start: e.target.value } })} />
+              </label>
+              <label className="field" style={{ flex: 1 }}>
+                <span>Back to work</span>
+                <input className="input" type="time" value={settings.lunch.end} onChange={(e) => e.target.value && setSettings({ lunch: { ...settings.lunch, end: e.target.value } })} />
+              </label>
+            </div>
+          )}
+
+          <h3 style={{ margin: "6px 0 8px" }}>Bedtime</h3>
+          <button className={`opt ${settings.sleep.enabled ? "on" : ""}`} style={{ padding: "10px 16px", marginBottom: 12 }} aria-pressed={settings.sleep.enabled} onClick={() => setSettings({ sleep: { ...settings.sleep, enabled: !settings.sleep.enabled } })}>
             {settings.sleep.enabled ? "🌙 Bedtime on" : "☀️ Bedtime off (they never sleep)"}
           </button>
           {settings.sleep.enabled && (
@@ -129,7 +157,7 @@ export function SettingsScreen({ nav }: { nav: Nav }) {
               </label>
             </div>
           )}
-          <p className="hint" style={{ margin: 0 }}>Tip: add <code>?time=23:30</code> to the address to preview the plaza at night.</p>
+          <p className="hint" style={{ margin: 0 }}>Tip: add <code>?time=12:10</code> or <code>?time=23:30</code> to the address to preview lunch or night time.</p>
         </section>
 
         <section className="panel" style={{ padding: 22 }}>

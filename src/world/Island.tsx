@@ -44,6 +44,7 @@ export function Island({ desks, busy }: { desks: number; busy: boolean[] }) {
       const x = Math.cos(a) * d, z = Math.sin(a) * d;
       if (z < -5 && Math.abs(x) < 7) continue; // desks
       if (z > 6 && Math.abs(x) < 9) continue; // the homes street
+      if (x > 5.5 && Math.abs(z) < 6) continue; // the Picnic Grill
       out.push({ x, z, s: 0.75 + r() * 0.35, hue: r() });
     }
     return out;
@@ -55,7 +56,7 @@ export function Island({ desks, busy }: { desks: number; busy: boolean[] }) {
       const a = r() * Math.PI * 2;
       const d = 5.5 + r() * 8.5;
       return { x: Math.cos(a) * d, z: Math.sin(a) * d, c: colors[Math.floor(r() * colors.length)]! };
-    }).filter((f) => !(f.z < -5 && Math.abs(f.x) < 6.5) && !(f.z > 8.5 && f.z < 14 && Math.abs(f.x) < 8.5));
+    }).filter((f) => !(f.z < -5 && Math.abs(f.x) < 6.5) && !(f.z > 8.5 && f.z < 14 && Math.abs(f.x) < 8.5) && !(f.x > 5.5 && Math.abs(f.z) < 5.5));
   }, []);
 
   return (

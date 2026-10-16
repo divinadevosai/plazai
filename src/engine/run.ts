@@ -3,7 +3,7 @@ import { nextOccurrence, uid, useStore } from "../store";
 import type { Agent, Provider, Task } from "../types";
 import { buildingById, PLAZA_ID, routeTask } from "../world/buildings";
 import { toast } from "../toast";
-import { clockNow, sleepPhase } from "../clock";
+import { clockNow, dayPhase, offDutyOf } from "../clock";
 
 const controllers = new Map<string, AbortController>();
 const WALK_MS = 2600;
@@ -20,12 +20,12 @@ export interface AssignOptions {
   /** A building id, "plaza", or "auto" (default) to pick from the task's wording. */
   buildingId?: string;
   repo?: string;
-  /** Wake sleeping avatars for this one. */
+  /** Wake sleeping avatars (or call them back from lunch) for this one. */
   urgent?: boolean;
 }
 
-/** True while the avatars are tucked up in bed. */
-export const everyoneAsleep = () => sleepPhase(useStore.getState().settings.sleep, clockNow()) === "asleep";
+/** "asleep" or "lunch" while the avatars are off duty, otherwise null. */
+export const offDuty = () => offDutyOf(dayPhase(useStore.getState().settings, clockNow()));
 
 /** Creates a task for one agent or a whole team and starts it. */
 export function assign(title: string, prompt: string, assignee: Task["assignee"], opts: AssignOptions = {}) {
@@ -33,6 +33,7 @@ export function assign(title: string, prompt: string, assignee: Task["assignee"]
   const ids = assignee.kind === "agent" ? [assignee.id] : (teams.find((t) => t.id === assignee.id)?.memberIds ?? []);
   const members = ids.filter((id) => agents.some((a) => a.id === id));
   if (!members.length) throw new Error("Nobody to give this task to yet.");
+  const off = offDuty();
   const task: Task = {
     id: uid("task"),
     title: title.trim() || prompt.trim().slice(0, 48),
@@ -41,26 +42,29 @@ export function assign(title: string, prompt: string, assignee: Task["assignee"]
     buildingId: !opts.buildingId || opts.buildingId === "auto" ? routeTask(`${title} ${prompt}`) : opts.buildingId,
     repo: opts.repo?.trim() || undefined,
     urgent: opts.urgent || undefined,
-    // At night, ordinary work waits for the morning; urgent work wakes them up.
-    status: everyoneAsleep() && !opts.urgent ? "queued" : "running",
+    // At night or lunchtime, ordinary work waits; urgent work wakes them up or calls them back.
+    status: off && !opts.urgent ? "queued" : "running",
+    waitFor: off && !opts.urgent ? (off === "lunch" ? "lunch" : "morning") : undefined,
     steps: members.map((agentId) => ({ agentId, status: "waiting", output: "" })),
     createdAt: Date.now(),
   };
   addTask(task);
   if (task.status === "queued") {
     chime("step");
-    toast("😴 Queued for the morning", "Everyone's asleep. Mark it urgent to wake them up.");
+    if (off === "lunch") toast("🥪 Queued for after lunch", "Everyone's on their lunch break. Mark it urgent to call them back.");
+    else toast("😴 Queued for the morning", "Everyone's asleep. Mark it urgent to wake them up.");
   } else void runTask(task.id);
   return task.id;
 }
 
-/** Urgent! Wakes the avatars for a queued task and starts it now. */
+/** Urgent! Wakes the avatars (or calls them back from lunch) for a queued task and starts it now. */
 export function wakeFor(taskId: string) {
   const s = useStore.getState();
   const t = s.tasks.find((x) => x.id === taskId);
   if (!t || t.status !== "queued") return;
   s.updateTask(taskId, { status: "running", urgent: true });
-  toast("⚡ Wakey wakey!", "They're up and rushing to it.");
+  if (t.waitFor === "lunch") toast("⚡ Lunch is over!", "They've dropped their sandwiches and are rushing back.");
+  else toast("⚡ Wakey wakey!", "They're up and rushing to it.");
   void runTask(taskId);
 }
 
@@ -209,13 +213,15 @@ async function repoContext(repo: string, signal: AbortSignal): Promise<string> {
 /** Fires due reminders and scheduled tasks, and starts the morning queue. Called every few seconds. */
 export function tickScheduler(now = Date.now()) {
   const s = useStore.getState();
-  if (!everyoneAsleep()) {
+  if (!offDuty()) {
     const waiting = s.tasks.filter((t) => t.status === "queued").sort((a, b) => a.createdAt - b.createdAt);
     for (const t of waiting) {
       s.updateTask(t.id, { status: "running" });
       void runTask(t.id);
     }
-    if (waiting.length) toast("☀️ Good morning!", `Starting ${waiting.length} task${waiting.length > 1 ? "s" : ""} from last night.`);
+    const n = `${waiting.length} task${waiting.length > 1 ? "s" : ""}`;
+    if (waiting.length && waiting.every((t) => t.waitFor === "lunch")) toast("🥪 Back from lunch!", `Starting ${n} that came in over lunch.`);
+    else if (waiting.length) toast("☀️ Good morning!", `Starting ${n} from last night.`);
   }
   for (const r of s.reminders) {
     if (r.done || r.at > now) continue;

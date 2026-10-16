@@ -61,6 +61,8 @@ export interface Task {
   kind?: "task" | "reminder";
   /** Urgent tasks wake sleeping avatars; others sent at night wait for the morning. */
   urgent?: boolean;
+  /** Why a queued task is waiting: the avatars are asleep, or out for lunch. */
+  waitFor?: "morning" | "lunch";
   status: "queued" | "running" | "done" | "failed" | "stopped";
   steps: Step[];
   createdAt: number;
@@ -77,6 +79,8 @@ export interface Settings {
   github: { token: string; defaultRepo: string };
   /** Bedtime for the avatars, in local "HH:MM". */
   sleep: { enabled: boolean; bedtime: string; wake: string };
+  /** Lunch break at the Picnic Grill, in local "HH:MM". */
+  lunch: { enabled: boolean; start: string; end: string };
 }
 
 export interface Reminder {
