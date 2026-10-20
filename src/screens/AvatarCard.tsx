@@ -5,7 +5,7 @@ import type { OffDuty } from "../clock";
 import { assign } from "../engine/run";
 import { useStore } from "../store";
 import type { Agent } from "../types";
-import { BUILDINGS, buildingById } from "../world/buildings";
+import { BUILDINGS, buildingById } from "../world/buildingList";
 
 const BRAINS: Record<string, string> = { google: "Google Gemini", anthropic: "Anthropic Claude", openai: "OpenAI", ollama: "Ollama (local)", demo: "Demo mode" };
 

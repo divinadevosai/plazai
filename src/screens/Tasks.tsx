@@ -3,7 +3,7 @@ import type { Nav } from "../App";
 import { Portrait } from "../avatar/Portrait";
 import { assign } from "../engine/run";
 import { useStore } from "../store";
-import { BUILDINGS, routeTask } from "../world/buildings";
+import { BUILDINGS, routeTask } from "../world/buildingList";
 import { ScreenFrame } from "./Chrome";
 import { TaskCard } from "./TaskCard";
 

@@ -2,7 +2,7 @@ import { useFrame } from "@react-three/fiber";
 import { useEffect, useMemo } from "react";
 import * as THREE from "three";
 import type { Agent } from "../types";
-import { sky } from "./sky";
+import { sky } from "./skyColors";
 
 export const HOME_R = 11.8;
 

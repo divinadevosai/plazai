@@ -4,7 +4,7 @@ import { Portrait } from "../avatar/Portrait";
 import { tickScheduler } from "../engine/run";
 import { uid, useStore } from "../store";
 import type { Repeat } from "../types";
-import { BUILDINGS } from "../world/buildings";
+import { BUILDINGS } from "../world/buildingList";
 import { ScreenFrame } from "./Chrome";
 
 const REPEATS: { id: Repeat; label: string }[] = [

@@ -5,7 +5,7 @@ import type { OffDuty } from "../clock";
 import { assign } from "../engine/run";
 import { useStore } from "../store";
 import type { Agent } from "../types";
-import type { BuildingDef } from "../world/buildings";
+import type { BuildingDef } from "../world/buildingList";
 
 export function BuildingIcon({ def, size = 22 }: { def: BuildingDef; size?: number }) {
   return (

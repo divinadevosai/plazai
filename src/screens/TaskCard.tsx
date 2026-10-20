@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Portrait } from "../avatar/Portrait";
 import { parseFiles } from "../engine/files";
 import { stopTask, wakeFor } from "../engine/run";
-import { buildingById } from "../world/buildings";
+import { buildingById } from "../world/buildingList";
 import { UploadDialog } from "./Upload";
 import { useStore } from "../store";
 import type { Task } from "../types";

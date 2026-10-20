@@ -5,7 +5,7 @@ import { Avatar3D, type Pose } from "../avatar/Avatar3D";
 import type { DayPhase } from "../clock";
 import type { Activity } from "../store";
 import type { Agent } from "../types";
-import { buildingSpot, PLAZA_ID } from "./buildings";
+import { buildingSpot, PLAZA_ID } from "./buildingList";
 import { homeSpot, type HomeState } from "./Homes";
 import { deskSpot } from "./Island";
 import { lunchSeat } from "./Lunch";
