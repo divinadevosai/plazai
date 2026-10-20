@@ -2,7 +2,7 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import { clockNow, daylight } from "../clock";
-import { sky } from "./sky";
+import { sky } from "./skyColors";
 
 const DAY = new THREE.Color("#bfe9ff");
 const DUSK = new THREE.Color("#f6b98e");

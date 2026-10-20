@@ -1,7 +1,7 @@
 import { chime } from "../sound";
 import { nextOccurrence, uid, useStore } from "../store";
 import type { Agent, Provider, Task } from "../types";
-import { buildingById, PLAZA_ID, routeTask } from "../world/buildings";
+import { buildingById, PLAZA_ID, routeTask } from "../world/buildingList";
 import { toast } from "../toast";
 import { clockNow, dayPhase, offDutyOf } from "../clock";
 import { apiHeaders } from "../session";

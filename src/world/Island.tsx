@@ -1,7 +1,7 @@
 import { useFrame } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
-import { BUILDINGS, buildingSpot } from "./buildings";
+import { BUILDINGS, buildingSpot } from "./buildingList";
 
 export const ISLAND_R = 28;
 export const ROAD_IN = 15.4;

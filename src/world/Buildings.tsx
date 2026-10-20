@@ -1,8 +1,8 @@
 import { useFrame } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
-import { BUILDINGS, buildingSpot, type BuildingDef } from "./buildings";
-import { sky } from "./sky";
+import { BUILDINGS, buildingSpot, type BuildingDef } from "./buildingList";
+import { sky } from "./skyColors";
 
 const INK = "#3b4252";
 

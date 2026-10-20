@@ -7,7 +7,7 @@ import type { Nav } from "../App";
 import { Portrait } from "../avatar/Portrait";
 import { assign } from "../engine/run";
 import { activityOf, useStore } from "../store";
-import { BUILDINGS, buildingById, buildingSpot } from "../world/buildings";
+import { BUILDINGS, buildingById, buildingSpot } from "../world/buildingList";
 import { Buildings } from "../world/Buildings";
 import { Island } from "../world/Island";
 import { PlazaAgent, tail } from "../world/PlazaAgent";
